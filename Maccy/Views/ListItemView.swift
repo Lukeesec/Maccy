@@ -58,7 +58,7 @@ struct ListItemView<Title: View, ID: Hashable>: View {
       if showIcons, let appIcon {
         VStack {
           Spacer(minLength: 0)
-          AppImageView(appImage: appIcon, size: NSSize(width: 15, height: 15))
+          AppImageView(appImage: appIcon, size: NSSize(width: Popup.appIconSize, height: Popup.appIconSize))
           Spacer(minLength: 0)
         }
         .padding(.leading, 4)
@@ -121,10 +121,14 @@ struct ListItemView<Title: View, ID: Hashable>: View {
     .frame(minHeight: Popup.itemHeight)
     .id(id)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .foregroundStyle(isSelected ? Color.white : .primary)
+    .foregroundStyle(isSelected && Popup.selectionUsesInvertedLabel ? Color.white : Color.primary)
     // macOS 26 broke hovering if no background is present.
     // The slight opcaity white background is a workaround
-    .background(isSelected ? Color.accentColor.opacity(0.8) : .white.opacity(0.001))
+    .background(
+      isSelected
+        ? Color.accentColor.opacity(Popup.selectionFillOpacity)
+        : Color.white.opacity(0.001)
+    )
     .clipShape(selectionAppearance.rect(cornerRadius: Popup.cornerRadius))
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(accessibilityLabel))

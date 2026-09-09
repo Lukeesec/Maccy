@@ -19,20 +19,92 @@ enum PopupState {
 class Popup {
   static let verticalSeparatorPadding = 6.0
   static let horizontalSeparatorPadding = 6.0
-  static let verticalPadding: CGFloat = 5
-  static let horizontalPadding: CGFloat = 5
   static let minimumPreviewHeight: CGFloat = 150
+
+  // Spotlight on macOS 26 insets its content noticeably further from the glass
+  // edge than Maccy historically did. Only widen on 26 so the pre-Tahoe layout,
+  // which is tuned for NSVisualEffectView, is left exactly as it was.
+  static let verticalPadding: CGFloat = if #available(macOS 26.0, *) {
+    6
+  } else {
+    5
+  }
+
+  static let horizontalPadding: CGFloat = if #available(macOS 26.0, *) {
+    8
+  } else {
+    5
+  }
+
+  // Search row metrics. Spotlight uses a borderless field with a large glyph
+  // sitting directly on the glass rather than a filled, bordered box.
+  static let searchFieldHeight: CGFloat = if #available(macOS 26.0, *) {
+    34
+  } else {
+    23
+  }
+
+  static let searchFontSize: CGFloat = if #available(macOS 26.0, *) {
+    16
+  } else {
+    13
+  }
+
+  static let searchIconSize: CGFloat = if #available(macOS 26.0, *) {
+    15
+  } else {
+    11
+  }
+
+  static let searchIconSpacing: CGFloat = if #available(macOS 26.0, *) {
+    8
+  } else {
+    5
+  }
+
+  // Alpha of the semantic tint applied to the glass. NSGlassEffectView takes its
+  // cast from whatever sits behind the window, so on a light wallpaper the panel
+  // reads light even when the system is in Dark Mode. Tinting toward
+  // windowBackgroundColor, which is appearance-aware, re-anchors the panel to
+  // Dark/Light while leaving the glass translucency intact. Raise this if the
+  // panel still washes out over bright wallpaper; lower it for more glass.
+  static let glassTintAlpha: CGFloat = 0.55
+
+  // Spotlight highlights the active row with a soft accent tint and leaves the
+  // label in its normal colour. The old hard accent block with forced white text
+  // is kept for pre-Tahoe, where it matches the rest of the system.
+  static let selectionFillOpacity: CGFloat = if #available(macOS 26.0, *) {
+    0.35
+  } else {
+    0.8
+  }
+
+  static let selectionUsesInvertedLabel: Bool = if #available(macOS 26.0, *) {
+    false
+  } else {
+    true
+  }
+
+  static let appIconSize: CGFloat = if #available(macOS 26.0, *) {
+    17
+  } else {
+    15
+  }
+
+  // Radius of the panel itself. Items are inset by horizontalPadding, so adding
+  // it to the item radius keeps the inner and outer curves concentric.
+  static var windowCornerRadius: CGFloat { cornerRadius + horizontalPadding }
 
   // Radius used for items inset by the padding. Ensures they visually have the same curvature
   // as the menu.
   static let cornerRadius: CGFloat = if #available(macOS 26.0, *) {
-    7
+    9
   } else {
     4
   }
 
   static let itemHeight: CGFloat = if #available(macOS 26.0, *) {
-    24
+    30
   } else {
     22
   }

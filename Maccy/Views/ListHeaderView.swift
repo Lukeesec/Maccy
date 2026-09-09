@@ -28,7 +28,7 @@ struct ListHeaderView: View {
           }
         }
         // Only reliable way to disable the cursor. allowsHitTesting() does not work
-        .offset(y: appState.searchVisible ? 0 : -Popup.itemHeight)
+        .offset(y: appState.searchVisible ? 0 : -Popup.searchFieldHeight)
     }
   }
 }

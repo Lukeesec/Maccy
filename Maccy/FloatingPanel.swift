@@ -62,7 +62,7 @@ class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
             self.saveWindowPosition()
         })
     )
-    contentView?.layer?.cornerRadius = Popup.cornerRadius + Popup.horizontalPadding
+    contentView?.layer?.cornerRadius = Popup.windowCornerRadius
   }
 
   func toggle(height: CGFloat, at popupPosition: PopupPosition = Defaults[.popupPosition]) {

@@ -37,6 +37,7 @@ enum KeyChord: CaseIterable {
   case extendToFirst
   case openPreferences
   case pinOrUnpin
+  case copyCurrentItem
   case selectCurrentItem
   case close
   case togglePreview
@@ -118,6 +119,11 @@ enum KeyChord: CaseIterable {
       self = .pinOrUnpin
     case (.comma, [.command]):
       self = .openPreferences
+    // Ctrl+C mirrors Enter: copy the highlighted item and close the popup.
+    // This must stay above the modifier catch-all further down, which would
+    // otherwise classify it as .ignored and pass it through to the search field.
+    case (.c, [.control]):
+      self = .copyCurrentItem
     case (.return, _),
          (.keypadEnter, _):
       self = .selectCurrentItem

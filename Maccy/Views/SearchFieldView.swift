@@ -8,22 +8,29 @@ struct SearchFieldView: View {
 
   var body: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: Popup.cornerRadius, style: .continuous)
-        .fill(Color.secondary)
-        .opacity(0.1)
-        .frame(height: 23)
+      // On macOS 26 the field sits directly on the glass, like Spotlight.
+      // Pre-Tahoe keeps the filled, bordered box it was designed around.
+      if #available(macOS 26.0, *) {
+        EmptyView()
+      } else {
+        RoundedRectangle(cornerRadius: Popup.cornerRadius, style: .continuous)
+          .fill(Color.secondary)
+          .opacity(0.1)
+          .frame(height: Popup.searchFieldHeight)
+      }
 
-      HStack {
+      HStack(spacing: Popup.searchIconSpacing) {
         Image(systemName: "magnifyingglass")
-          .frame(width: 11, height: 11)
+          .font(.system(size: Popup.searchIconSize, weight: .medium))
+          .foregroundStyle(.secondary)
           .padding(.leading, 5)
-          .opacity(0.8)
           .accessibilityHidden(true)
 
         TextField(placeholder, text: $query)
           .disableAutocorrection(true)
           .lineLimit(1)
           .textFieldStyle(.plain)
+          .font(.system(size: Popup.searchFontSize))
           .onSubmit {
             appState.select(flags: .currentModifierFlags)
           }
@@ -33,15 +40,16 @@ struct SearchFieldView: View {
             query = ""
           } label: {
             Image(systemName: "xmark.circle.fill")
-              .frame(width: 11, height: 11)
+              .font(.system(size: Popup.searchIconSize))
+              .foregroundStyle(.tertiary)
               .padding(.trailing, 5)
           }
           .buttonStyle(.plain)
-          .opacity(0.9)
           .accessibilityLabel(Text("search_clear_accessibility_label"))
         }
       }
     }
+    .frame(height: Popup.searchFieldHeight)
   }
 }
 

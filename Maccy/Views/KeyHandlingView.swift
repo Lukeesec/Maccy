@@ -147,6 +147,13 @@ struct KeyHandlingView<Content: View>: View {
         case .pinOrUnpin:
           appState.togglePin()
           return .handled
+        case .copyCurrentItem:
+          // Pass empty flags deliberately. .currentModifierFlags would still carry
+          // .control at this point, and HistoryItemAction maps .control to .unknown,
+          // which returns early and copies nothing. Empty flags take the same path
+          // as an unmodified Return: close, then copy.
+          appState.select(flags: [])
+          return .handled
         case .selectCurrentItem:
           appState.select(flags: .currentModifierFlags)
           return .handled
