@@ -376,10 +376,14 @@ final class PreviewTextView: NSTextView {
     let accepted = super.becomeFirstResponder()
     if accepted {
       // NSTextView selects its whole contents when it takes first responder, so
-      // the first keystroke would replace the draft rather than extend it. Doing
-      // this here rather than at the call site is the only reliable point: the
-      // selection AppKit installs lands after makeFirstResponder returns.
-      setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
+      // the first keystroke would replace the draft rather than extend it.
+      // AppKit installs that selection after this returns, and after the string
+      // assignment in updateNSView, so both earlier attempts were overwritten --
+      // the caret has to be placed a runloop turn later to survive.
+      DispatchQueue.main.async { [weak self] in
+        guard let self, self.window?.firstResponder === self else { return }
+        self.setSelectedRange(NSRange(location: (self.string as NSString).length, length: 0))
+      }
       onFocusChange?(true)
     }
     return accepted
