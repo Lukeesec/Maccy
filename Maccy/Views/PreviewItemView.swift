@@ -346,10 +346,6 @@ struct EditablePreviewTextView: NSViewRepresentable {
         guard let textView, let window = textView.window else { return }
         guard window.firstResponder !== textView else { return }
         window.makeFirstResponder(textView)
-        // NSTextView selects its whole contents when it takes first responder, so
-        // the first keystroke would replace the draft rather than extend it.
-        // Entering the field to edit means a caret at the end.
-        textView.setSelectedRange(NSRange(location: textView.string.count, length: 0))
       }
     }
   }
@@ -371,7 +367,14 @@ final class PreviewTextView: NSTextView {
 
   override func becomeFirstResponder() -> Bool {
     let accepted = super.becomeFirstResponder()
-    if accepted { onFocusChange?(true) }
+    if accepted {
+      // NSTextView selects its whole contents when it takes first responder, so
+      // the first keystroke would replace the draft rather than extend it. Doing
+      // this here rather than at the call site is the only reliable point: the
+      // selection AppKit installs lands after makeFirstResponder returns.
+      setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
+      onFocusChange?(true)
+    }
     return accepted
   }
 
