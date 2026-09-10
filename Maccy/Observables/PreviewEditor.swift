@@ -90,14 +90,12 @@ final class PreviewEditor {
   }
 
   private func reset() {
-    // Focus is cleared here too. Leaving it set with no pane on screen strands
-    // Up/Down navigation, and the only thing that used to clear it was a
-    // notification that may be missed or reordered.
-    isFocused = false
     itemID = nil
     original = ""
     draftStorage = ""
     isEdited = false
+    // Clearing focus here is load-bearing: left set with no pane on screen it
+    // strands Up/Down navigation.
     isFocused = false
   }
 }
