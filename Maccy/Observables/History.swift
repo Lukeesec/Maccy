@@ -63,9 +63,15 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
   }
 
   // Enough rows to fill the popup at its tallest, so the first paint is complete.
-  // The rest arrives page by page without blocking the main actor.
+  // The rest arrives page by page, yielding to the main actor between pages.
   private static let firstPageSize = 60
   private static let pageSize = 120
+
+  // Recomputing `items` costs a `Search` pass over everything loaded so far, and
+  // a SQLite query on top of that when a query is live. Doing it once per page
+  // is what made paging quadratic, so it is coalesced: at most one refresh per
+  // interval while paging runs, plus one guaranteed refresh when it finishes.
+  private static let refreshInterval: TimeInterval = 0.15
 
   private let search = Search()
   private let sorter = Sorter()
@@ -143,85 +149,179 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     // Pinned items are few - the pin alphabet is a fixed 21 characters - and
     // `Sorter` has to place them relative to everything else, so they are always
     // fetched in full. Only unpinned items are paged.
+    let sortBy = Defaults[.sortBy]
     let pinned = (try? Storage.shared.fetchPinnedHistoryItems()) ?? []
     let firstPage = (try? Storage.shared.fetchUnpinnedHistoryItems(
-      offset: 0,
-      limit: Self.firstPageSize
+      after: nil,
+      limit: Self.firstPageSize,
+      sortBy: sortBy
     )) ?? []
 
-    all = sorter.sort(pinned + firstPage).map { HistoryItemDecorator($0) }
+    all = sorter.sort(pinned + firstPage, by: sortBy).map { HistoryItemDecorator($0) }
     refreshItems(resetSelection: false)
     updateShortcuts()
     AppState.shared.popup.needsResize = true
 
-    guard firstPage.count == Self.firstPageSize else {
+    guard firstPage.count == Self.firstPageSize, let boundary = firstPage.last else {
       // The whole history fits in one page, so there is nothing to continue.
       limitHistorySize(to: Defaults[.size])
       updateShortcuts()
       return
     }
 
+    let cursor = HistoryPageCursor(boundary)
     loadTask = Task { @MainActor [weak self] in
-      await self?.loadRemainder(from: Self.firstPageSize)
+      await self?.loadRemainder(after: cursor, by: sortBy)
     }
   }
 
   /// Page in everything after the first page, yielding between pages so the
   /// popup stays responsive while it happens.
+  ///
+  /// Paging is keyset-based: each page resumes from the previous page's last
+  /// row *by value*. It cannot use `fetchOffset`, because this very class writes
+  /// to the store while the paging runs — `add()` deletes the row it
+  /// consolidates a duplicate into, `delete()` removes whatever the user picked,
+  /// `limitHistorySize` trims the tail — and every delete below the current
+  /// offset would shift the store up by one and step the reader over exactly one
+  /// row for the rest of the session. See `HistoryPageCursor`.
   @MainActor
-  private func loadRemainder(from start: Int) async {
-    var offset = start
+  private func loadRemainder(after start: HistoryPageCursor, by sortBy: Sorter.By) async {
+    var cursor = start
+    var limit = Self.pageSize
+    var pendingRefresh = false
+    var lastRefresh = Date.now
 
     while !Task.isCancelled {
       await Task.yield()
       guard !Task.isCancelled else { return }
 
       guard let page = try? Storage.shared.fetchUnpinnedHistoryItems(
-        offset: offset,
-        limit: Self.pageSize
-      ), !page.isEmpty else {
+        after: cursor,
+        limit: limit,
+        sortBy: sortBy
+      ), let boundary = page.last else {
         break
       }
 
-      offset += page.count
-      merge(page)
+      let added = merge(page, by: sortBy)
+      pendingRefresh = pendingRefresh || added > 0
 
-      if page.count < Self.pageSize {
+      let read = page.count
+      cursor = HistoryPageCursor(boundary)
+
+      if read < limit {
         break
+      }
+
+      if added == 0 {
+        // A whole page of rows already loaded. The cursor's bound is inclusive
+        // on the tiebreaker, so this can only happen when more than `limit` rows
+        // share the cursor's key *and* its tiebreaker — pathological, but it
+        // would otherwise re-read the same block forever. Widen the window until
+        // it clears the block.
+        limit *= 2
+      } else {
+        limit = Self.pageSize
+      }
+
+      if pendingRefresh, Date.now.timeIntervalSince(lastRefresh) >= Self.refreshInterval {
+        refreshItems(resetSelection: false)
+        AppState.shared.popup.needsResize = true
+        pendingRefresh = false
+        lastRefresh = Date.now
       }
     }
 
     guard !Task.isCancelled else { return }
 
     limitHistorySize(to: Defaults[.size])
+    refreshItems(resetSelection: false)
     updateShortcuts()
     AppState.shared.popup.needsResize = true
     loadTask = nil
   }
 
-  /// Fold a freshly paged batch into `all`, keeping `Sorter`'s ordering.
+  /// Fold a freshly paged batch into `all` in O(n + m), keeping `Sorter`'s
+  /// ordering. Returns how many rows were genuinely new.
   ///
-  /// The batch is deduplicated against what is already loaded because a copy
-  /// made mid-load shifts the store's offsets under us.
+  /// `all` and `page` are each already in `Sorter`'s order, so their union is a
+  /// linear merge rather than another sort. Re-sorting here meant one
+  /// `Sorter.sort` — two chained full `sorted(by:)` passes — per page over a
+  /// growing array, which for a 10k history is ~83 passes and asymptotically
+  /// worse than the single fetch and single sort the paging replaced.
+  ///
+  /// Nothing here touches `items`: recomputing that runs a whole `Search` pass
+  /// and is coalesced by the caller instead of fired once per page.
+  ///
+  /// The batch is still deduplicated against what is already loaded. That is for
+  /// rows *added* mid-load, not deleted ones — a keyset cursor already survives
+  /// deletes. A copy made while paging can still land below the cursor and be
+  /// read a second time: a consolidated duplicate inherits the old item's
+  /// `firstCopiedAt`, and its `numberOfCopies` is whatever the two summed to.
   @MainActor
-  private func merge(_ page: [HistoryItem]) {
+  @discardableResult
+  private func merge(_ page: [HistoryItem], by sortBy: Sorter.By) -> Int {
     let known = Set(all.map { ObjectIdentifier($0.item) })
-    let fresh = page.filter { !known.contains(ObjectIdentifier($0)) }
-    guard !fresh.isEmpty else { return }
+    let incoming = page
+      .filter { !known.contains(ObjectIdentifier($0)) }
+      .map { HistoryItemDecorator($0) }
+    guard !incoming.isEmpty else { return 0 }
 
-    var decorators: [ObjectIdentifier: HistoryItemDecorator] = [:]
+    // `Sorter` sorts by key and then stably by pin, so `all` is a pinned block
+    // and an unpinned block, each internally in key order. Only unpinned rows
+    // are ever paged, so the merge happens entirely inside the unpinned block
+    // and the pinned block is carried across untouched.
+    var pinned: [HistoryItemDecorator] = []
+    var unpinned: [HistoryItemDecorator] = []
+    unpinned.reserveCapacity(all.count)
     for decorator in all {
-      decorators[ObjectIdentifier(decorator.item)] = decorator
-    }
-    for item in fresh {
-      decorators[ObjectIdentifier(item)] = HistoryItemDecorator(item)
+      if decorator.isPinned {
+        pinned.append(decorator)
+      } else {
+        unpinned.append(decorator)
+      }
     }
 
-    all = sorter.sort(all.map(\.item) + fresh).compactMap { decorators[ObjectIdentifier($0)] }
+    var merged: [HistoryItemDecorator] = []
+    merged.reserveCapacity(unpinned.count + incoming.count)
 
-    // Never steal the selection from someone who is already navigating or typing.
-    refreshItems(resetSelection: false)
-    AppState.shared.popup.needsResize = true
+    var left = 0
+    var right = 0
+    while left < unpinned.count, right < incoming.count {
+      // Ties go to the already-loaded side, which is what `Sorter`'s stable sort
+      // does for a single fetch: rows the store handed over earlier stay first.
+      if Self.precedes(incoming[right].item, unpinned[left].item, by: sortBy) {
+        merged.append(incoming[right])
+        right += 1
+      } else {
+        merged.append(unpinned[left])
+        left += 1
+      }
+    }
+    merged.append(contentsOf: unpinned[left...])
+    merged.append(contentsOf: incoming[right...])
+
+    all = Defaults[.pinTo] == .bottom ? merged + pinned : pinned + merged
+
+    return incoming.count
+  }
+
+  /// `Sorter`'s ordering predicate for a single key, minus the pin pass.
+  ///
+  /// Kept deliberately identical to `Sorter.bySortingAlgorithm`: `merge` has to
+  /// produce exactly the order one fetch followed by one `Sorter.sort` would
+  /// have produced, and the only way to guarantee that is to compare the same
+  /// way.
+  private static func precedes(_ lhs: HistoryItem, _ rhs: HistoryItem, by sortBy: Sorter.By) -> Bool {
+    switch sortBy {
+    case .firstCopiedAt:
+      return lhs.firstCopiedAt > rhs.firstCopiedAt
+    case .numberOfCopies:
+      return lhs.numberOfCopies > rhs.numberOfCopies
+    default:
+      return lhs.lastCopiedAt > rhs.lastCopiedAt
+    }
   }
 
   /// `all`, narrowed to the active scope. Identical to `all` on macOS 14 and 15,
@@ -232,6 +332,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       return all
     }
 
+    ForkItemKindCache.prune(expecting: all.count)
     return all.filter { scope.matches($0.item) }
   }
 
