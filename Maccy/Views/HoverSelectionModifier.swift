@@ -13,7 +13,12 @@ private struct HoverSelectionModifier: ViewModifier {
   /// edit. Auto-open is off in this fork, so an open preview means the user
   /// asked for it: treat it as a focused mode.
   private var hoverSelectionSuppressed: Bool {
-    ForkStyle.isActive && appState.preview.state.isOpen
+    // Not just .isOpen: resizing the panel as the preview animates in moves the
+    // rows under a stationary pointer, and ContentView's onMouseMove clears
+    // isKeyboardNavigating, so the resulting hover retargeted the selection
+    // mid-transition. That is the "arrow right pops my selection to the top".
+    ForkStyle.isActive
+      && (appState.preview.state.isOpen || appState.preview.state.isAnimating)
   }
 
   func body(content: Content) -> some View {

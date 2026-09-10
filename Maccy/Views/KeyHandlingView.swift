@@ -72,9 +72,24 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
         // depend on that state being consistent. Read the raw key code, drop the
         // focus, take the picker down with it, hand the field back. A second
         // Escape then closes the popup, as it always has.
-        if KeyChord.isEscape(event), PreviewEditor.shared.isFocused {
+        // Copy is checked first and off the key code: Option+C produces a
+        // character and was being eaten as text input before the chord table saw
+        // it, which is why Ctrl+C worked and Option+C did not.
+        if KeyChord.isCopyShortcut(event) {
+          appState.select(flags: [])
+          return .handled
+        }
+
+        // Escape when the preview is open at all, not merely when it believes it
+        // has focus. The reported lock-up is precisely the case where that flag
+        // disagrees with reality, so it must not be the thing Escape depends on.
+        if KeyChord.isEscape(event),
+           PreviewEditor.shared.isFocused || appState.preview.state.isOpen {
           PreviewEditor.shared.isFocused = false
           appState.closeScopePicker()
+          if appState.preview.state.isOpen {
+            appState.preview.togglePreview()
+          }
           refocusSearch()
           return .handled
         }

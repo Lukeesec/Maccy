@@ -227,6 +227,10 @@ class NavigationManager { // swiftlint:disable:this type_body_length
         selectFromKeyboardNavigation(item: nextItem)
       } else if history.pasteStack != nil {
         selectWithoutScrolling(item: nil)
+      } else if ForkStyle.isActive, let last = history.lastVisibleItem {
+        // Up from the top wraps to the end of what is loaded, rather than
+        // stalling on the first row.
+        selectFromKeyboardNavigation(item: last)
       } else {
         highlightFirst()
       }

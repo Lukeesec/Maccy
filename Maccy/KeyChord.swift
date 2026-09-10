@@ -116,6 +116,20 @@ enum KeyChord: CaseIterable {
   /// classifies Escape differently depending on what else is open and is
   /// therefore exactly the wrong thing to ask when the question is "how do I get
   /// out of here". 53 is Escape on every layout.
+  /// True when the event is Ctrl+C or Option+C, read off the hardware key code.
+  ///
+  /// Option+C produces a character ("ç"), so it can be consumed as text input
+  /// before the chord table ever sees it -- which is why Ctrl+C worked and
+  /// Option+C did not. Reading the code sidesteps whoever ate it.
+  static func isCopyShortcut(_ event: NSEvent?) -> Bool {
+    guard let event, event.type == .keyDown, Int(event.keyCode) == kVK_ANSI_C else { return false }
+
+    let flags = event.modifierFlags
+      .intersection(.deviceIndependentFlagsMask)
+      .subtracting([.capsLock, .numericPad, .function])
+    return flags == [.control] || flags == [.option]
+  }
+
   static func isEscape(_ event: NSEvent?) -> Bool {
     guard let event, event.type == .keyDown else { return false }
 
