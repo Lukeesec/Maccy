@@ -109,7 +109,10 @@ struct PreviewItemView: View {
     }
     .controlSize(.small)
     .foregroundStyle(ForkStyle.isActive ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-    .padding(ForkStyle.isActive ? 14 : 0)
+    // The metadata rows are label/value HStacks; without this they wrap mid-word
+    // ("Septemb / er 9") once the padding narrows the column.
+    .lineLimit(ForkStyle.isActive ? 1 : nil)
+    .padding(ForkStyle.isActive ? 12 : 0)
   }
 }
 
