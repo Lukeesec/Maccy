@@ -10,6 +10,7 @@
 set -euo pipefail
 
 APP_DEST="/Applications/Maccy.app"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -24,11 +25,21 @@ if [[ -z "$ZIP" ]]; then
   command -v gh >/dev/null 2>&1 || die "gh is not installed. Pass a downloaded zip instead:
        script/install-artifact.sh ~/Downloads/Maccy.zip"
 
-  step "Downloading the latest successful CI build"
-  RUN_ID="$(gh run list --workflow=build-fork.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')"
-  [[ -n "$RUN_ID" ]] || die "no successful 'Build fork' run found. Check: gh run list --workflow=build-fork.yml"
+  # Pin to the fork explicitly. This checkout also has an "upstream" remote, and
+  # gh would otherwise resolve to p0deje/Maccy, which has no such workflow.
+  ORIGIN_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+  [[ -n "$ORIGIN_URL" ]] || die "cannot determine the fork's repository (no 'origin' remote).
+       Pass a downloaded zip instead: script/install-artifact.sh ~/Downloads/Maccy.zip"
+  REPO_SLUG="$(printf '%s' "$ORIGIN_URL" | sed -E 's#^.*github\.com[:/]##; s#\.git$##')"
 
-  gh run download "$RUN_ID" --name Maccy-spotlight --dir "$WORKDIR"
+  step "Downloading the latest successful CI build from $REPO_SLUG"
+  RUN_ID="$(gh run list --repo "$REPO_SLUG" --workflow=build-fork.yml --status=success \
+              --limit=1 --json databaseId --jq '.[0].databaseId')"
+  [[ -n "$RUN_ID" ]] || die "no successful 'Build fork' run found in $REPO_SLUG.
+       Check: gh run list --repo $REPO_SLUG --workflow=build-fork.yml"
+
+  echo "run $RUN_ID"
+  gh run download "$RUN_ID" --repo "$REPO_SLUG" --name Maccy-spotlight --dir "$WORKDIR"
   ZIP="$WORKDIR/Maccy.zip"
 fi
 
@@ -88,8 +99,11 @@ cat <<EOF
 
 Done. Running Maccy $VERSION.
 
-Clipboard history and settings are untouched: the bundle identifier is unchanged,
-so this build reads the same container (~/Library/Containers/org.p0deje.Maccy).
+History and settings live at ~/Library/Application Support/Maccy and
+~/Library/Preferences/org.p0deje.Maccy.plist. These builds are not sandboxed --
+an ad-hoc signature cannot satisfy the App Sandbox -- so they do not use
+~/Library/Containers/org.p0deje.Maccy. Your data was copied out of that
+container, which is left intact, so reverting to stock Maccy still finds it.
 
 One-time step: this build is ad-hoc signed, so macOS treats it as a new app for
 privacy purposes. Pasting will not work until you re-grant Accessibility:
