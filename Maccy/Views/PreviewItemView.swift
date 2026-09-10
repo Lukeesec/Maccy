@@ -126,6 +126,7 @@ struct PreviewItemView: View {
       EditablePreviewTextView(
         text: Binding(get: { editor.draft }, set: { editor.draft = $0 }),
         isFocused: Binding(get: { editor.isFocused }, set: { editor.isFocused = $0 }),
+        content: editor.draft,
         focused: editor.isFocused
       )
       .frame(maxWidth: .infinity, minHeight: 44)
@@ -251,6 +252,8 @@ struct PreviewItemView: View {
 struct EditablePreviewTextView: NSViewRepresentable {
   @Binding var text: String
   @Binding var isFocused: Bool
+  /// The same value as `text`, passed as a plain read, for the reason below.
+  let content: String
   /// The same value as `isFocused`, passed as a plain read.
   ///
   /// Constructing `Binding(get:set:)` never calls the getter during body
@@ -282,12 +285,12 @@ struct EditablePreviewTextView: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     guard let textView = scrollView.documentView as? PreviewTextView else { return }
 
-    if textView.string != text {
-      textView.string = text
+    if textView.string != content {
+      textView.string = content
       // Assigning .string resets the selection, and it can land after the
       // becomeFirstResponder caret placement. Re-assert the caret here so the
       // first keystroke extends the draft instead of replacing it.
-      textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+      textView.setSelectedRange(NSRange(location: (content as NSString).length, length: 0))
     }
 
     context.coordinator.syncFirstResponder(to: focused, in: textView)
