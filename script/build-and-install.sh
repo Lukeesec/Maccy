@@ -53,6 +53,7 @@ xcodebuild \
   DEVELOPMENT_TEAM="" \
   PROVISIONING_PROFILE_SPECIFIER="" \
   ENABLE_HARDENED_RUNTIME=NO \
+  CODE_SIGN_ENTITLEMENTS=Maccy/Maccy-adhoc.entitlements \
   build
 
 APP_BUILT="$DERIVED/Build/Products/Release/Maccy.app"
@@ -68,6 +69,12 @@ case "$FLAGS" in
        signature; it would abort at launch. ENABLE_HARDENED_RUNTIME=NO did not
        take effect." ;;
 esac
+
+if codesign -d --entitlements - --xml "$APP_BUILT" 2>/dev/null | grep -q "com.apple.security.app-sandbox"; then
+  die "built app carries the app-sandbox entitlement under an ad-hoc signature;
+       it would hang at launch in _libsecinit_appsandbox.
+       CODE_SIGN_ENTITLEMENTS=Maccy/Maccy-adhoc.entitlements did not take effect."
+fi
 
 BUILT_VERSION="$(defaults read "$APP_BUILT/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo '?')"
 step "Built Maccy $BUILT_VERSION at $APP_BUILT"
@@ -85,6 +92,9 @@ if brew list --cask maccy >/dev/null 2>&1; then
          brew uninstall --cask maccy
        then re-run this script."
 fi
+
+step "Migrating data out of the sandbox container if needed"
+"$(dirname "${BASH_SOURCE[0]}")/migrate-container-data.sh"
 
 step "Quitting Maccy if it is running"
 osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true

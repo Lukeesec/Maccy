@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for ad-hoc signed fork builds.
+
+  The App Sandbox cannot be used with an ad-hoc signature. secinitd never
+  answers the sandbox-initialisation XPC request, so the process deadlocks in
+  _libsecinit_appsandbox during dyld's initialisers — before AppKit is even
+  loaded. It presents as a live PID with one thread that never opens a window.
+  Sandboxing needs a real signing identity (a Team ID and provisioning
+  profile), which a locally or CI built fork does not have.
+
+  So com.apple.security.app-sandbox is omitted here, along with the two
+  temporary-exception mach-lookup entries, which only mean anything inside the
+  sandbox.
+
+  Consequence: an unsandboxed Maccy stores its history at
+  ~/Library/Application Support/Maccy rather than inside
+  ~/Library/Containers/org.p0deje.Maccy. script/install-artifact.sh migrates
+  the data across on first install.
+
+  Maccy/Maccy.entitlements remains upstream's, unmodified, for real signed builds.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+</dict>
+</plist>

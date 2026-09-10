@@ -61,6 +61,9 @@ if brew list --cask maccy >/dev/null 2>&1; then
        then re-run this script."
 fi
 
+step "Migrating data out of the sandbox container if needed"
+"$(dirname "${BASH_SOURCE[0]}")/migrate-container-data.sh"
+
 step "Quitting Maccy if it is running"
 osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
 for _ in $(seq 1 20); do

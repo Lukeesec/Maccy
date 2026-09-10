@@ -77,10 +77,44 @@ script/build-and-install.sh
 your Apple ID — `mas` cannot perform the initial "Get". If it reports that you do
 not own the app, use `xcodes` or the App Store GUI.
 
+## One real trade-off: these builds are not sandboxed
+
+Stock Maccy ships sandboxed. This fork cannot be, and you should decide whether
+that is acceptable before installing it.
+
+An ad-hoc signature cannot satisfy the App Sandbox. `secinitd` never answers the
+sandbox-initialisation XPC request, so the process deadlocks inside
+`_libsecinit_appsandbox` during dyld's initialisers — before AppKit loads. It looks
+alive (a real PID, no crash log) but has one thread and never opens a window.
+Sandboxing needs a genuine signing identity with a Team ID and provisioning
+profile, which neither a CI build nor a local ad-hoc build has.
+
+So `Maccy/Maccy-adhoc.entitlements` drops `com.apple.security.app-sandbox`, and
+both build paths assert the entitlement is absent so it cannot creep back in.
+
+**What that costs you.** A sandboxed Maccy is confined to its own container; this
+one is not, so it runs with your user's full file access. For a clipboard manager
+that already sees everything you copy, the marginal exposure is small — but it is
+a real reduction against stock, and it is your call.
+
+**If you would rather keep the sandbox**, build locally in Xcode signed with your
+own Apple Development identity (a free Apple ID is enough). A real Team ID makes
+the sandbox work, and `Maccy/Maccy.entitlements` — upstream's, unmodified — is
+still there for exactly that.
+
+**Where your data lives.** An unsandboxed Maccy reads
+`~/Library/Application Support/Maccy/Storage.sqlite` and
+`~/Library/Preferences/org.p0deje.Maccy.plist`, rather than the same paths
+redirected into `~/Library/Containers/org.p0deje.Maccy/Data`.
+`script/migrate-container-data.sh` copies your history and settings across on first
+install. It copies rather than moves, so the container stays intact and reverting
+to stock Maccy restores everything.
+
 ## If you are running stock Maccy, here is the upgrade
 
-Your clipboard history and settings survive. The bundle identifier is unchanged, so
-this build reads the same container (`~/Library/Containers/org.p0deje.Maccy`).
+Your clipboard history and settings survive — they are copied out of the sandbox
+container on first install, as described above. The container itself is left
+untouched.
 
 ```sh
 # 1. Detach Homebrew so it cannot overwrite the fork later.
@@ -119,8 +153,13 @@ Or: `defaults write org.p0deje.Maccy showTitle -bool false` and relaunch.
 brew install --cask maccy
 ```
 
-Then re-grant Accessibility for the stock app. History and settings survive this too.
-Delete any leftover `/Applications/Maccy.app.backup-*` once you are happy.
+Then re-grant Accessibility for the stock app. Stock Maccy reads the sandbox
+container, which this fork never modified, so your history and settings are exactly
+as they were before you switched. Anything you copied *while running the fork*
+lives in `~/Library/Application Support/Maccy` and will not appear.
+
+Delete any leftover `/Applications/Maccy.app.backup-*` and
+`~/Library/Application Support/Maccy.superseded-*` once you are happy.
 
 ## Tuning the look
 

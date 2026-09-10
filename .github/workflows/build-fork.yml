@@ -42,6 +42,7 @@ jobs:
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             ENABLE_HARDENED_RUNTIME=NO \
+            CODE_SIGN_ENTITLEMENTS=Maccy/Maccy-adhoc.entitlements \
             build
 
       - name: Verify and package
@@ -70,6 +71,15 @@ jobs:
               exit 1
               ;;
           esac
+
+          # An ad-hoc signature cannot satisfy the App Sandbox: secinitd never
+          # replies and the app deadlocks in _libsecinit_appsandbox before AppKit
+          # loads, presenting as a live PID that never opens a window.
+          if codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "com.apple.security.app-sandbox"; then
+            echo "::error::app-sandbox entitlement is present on an ad-hoc signed build; it will hang at launch"
+            exit 1
+          fi
+          echo "sandbox entitlement correctly absent"
 
           echo "--- architectures ---"
           lipo -archs "$APP/Contents/MacOS/Maccy"
