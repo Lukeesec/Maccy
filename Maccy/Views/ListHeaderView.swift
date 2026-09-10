@@ -11,9 +11,14 @@ struct ListHeaderView: View {
 
   @Default(.showTitle) private var showTitle
 
+  /// System surfaces never name themselves. Spotlight has no "Spotlight" label, so
+  /// the title is suppressed outright once the redesign is active, regardless of
+  /// the preference, which still governs the pre-Tahoe layout.
+  private var titleVisible: Bool { showTitle && !ForkStyle.isActive }
+
   var body: some View {
     HStack {
-      if showTitle {
+      if titleVisible {
         Text("Maccy")
           .foregroundStyle(.secondary)
           .padding(.leading, 5)

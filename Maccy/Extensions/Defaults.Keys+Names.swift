@@ -24,6 +24,14 @@ extension Defaults.Keys {
   private static let preferencesSuite: UserDefaults = .standard
 #endif
 
+  // Spotlight-redesign variants. See ForkStyle.swift.
+  static let forkRowStyle = Key<ForkRowStyle>("forkRowStyle", default: .twoLine, suite: preferencesSuite)
+  static let forkChrome = Key<ForkChrome>("forkChrome", default: .hintBar, suite: preferencesSuite)
+  static let forkSelectionStyle = Key<ForkSelectionStyle>(
+    "forkSelectionStyle", default: .pill, suite: preferencesSuite
+  )
+  static let forkGrouping = Key<ForkGrouping>("forkGrouping", default: .byTime, suite: preferencesSuite)
+
   static let clearOnQuit = Key<Bool>("clearOnQuit", default: false, suite: preferencesSuite)
   static let clearSystemClipboard = Key<Bool>("clearSystemClipboard", default: false, suite: preferencesSuite)
   static let clipboardCheckInterval = Key<Double>("clipboardCheckInterval", default: 0.5, suite: preferencesSuite)

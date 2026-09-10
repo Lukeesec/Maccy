@@ -1,4 +1,5 @@
 import Defaults
+import KeyboardShortcuts
 import SwiftUI
 
 struct FooterView: View {
@@ -19,6 +20,21 @@ struct FooterView: View {
   }
 
   var body: some View {
+    Group {
+      switch ForkStyle.chrome {
+      case .menu:
+        menuFooter
+      case .hintBar:
+        HintBarView()
+      case .stripped:
+        Color.clear.frame(height: 0)
+      }
+    }
+    .readHeight(appState, into: \.popup.footerHeight)
+  }
+
+  /// Upstream's selectable Clear / Preferences / About / Quit rows.
+  private var menuFooter: some View {
     VStack(spacing: 0) {
       Divider()
         .padding(.horizontal, Popup.horizontalSeparatorPadding)
@@ -57,6 +73,39 @@ struct FooterView: View {
     .invisible(!showFooter)
     .frame(maxHeight: showFooter ? nil : 0)
     .padding(.bottom, showFooter ? Popup.verticalPadding : 0)
-    .readHeight(appState, into: \.popup.footerHeight)
+  }
+}
+
+/// A quiet bar of keyboard hints. Instruction, not menu: nothing here is
+/// selectable, which is what keeps the list reading as content only.
+struct HintBarView: View {
+  private var deleteHint: String? {
+    KeyboardShortcuts.Shortcut(name: .delete)?.description
+  }
+
+  var body: some View {
+    HStack(spacing: 14) {
+      Spacer(minLength: 0)
+      hint("↩", "hint_copy")
+      hint("⌥↩", "hint_paste")
+      if let deleteHint {
+        hint(deleteHint, "hint_delete")
+      }
+    }
+    .padding(.horizontal, Popup.rowInset + 8)
+    .padding(.top, 6)
+    .padding(.bottom, Popup.verticalPadding + 2)
+    .accessibilityHidden(true)
+  }
+
+  private func hint(_ keys: String, _ labelKey: String) -> some View {
+    HStack(spacing: 4) {
+      Text(keys)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+      Text(LocalizedStringKey(labelKey))
+        .font(.system(size: 11))
+        .foregroundStyle(.tertiary)
+    }
   }
 }

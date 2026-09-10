@@ -21,6 +21,9 @@ class Footer: ItemsContainer {
     return Defaults[.showFooter]
   }
   var containerVisible: Bool {
+    // With the footer menu stripped there are no selectable footer rows, so the
+    // navigator must not be able to land on one.
+    guard ForkStyle.chrome == .menu else { return false }
     return showFooter
   }
 

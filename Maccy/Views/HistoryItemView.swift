@@ -30,6 +30,45 @@ struct HistoryItemView: View {
     return ColorImage.from(item.title)
   }
 
+  private static let timeFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .none
+    formatter.timeStyle = .short
+    return formatter
+  }()
+
+  /// Short label for anything that is not plain text. Text is the overwhelming
+  /// majority, and Spotlight does not label the obvious case.
+  private var kindLabel: String? {
+    if item.hasImage {
+      return NSLocalizedString("kind_image", comment: "")
+    }
+    if !item.item.fileURLs.isEmpty {
+      return NSLocalizedString("kind_file", comment: "")
+    }
+    let trimmed = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://"),
+       !trimmed.contains(" ") {
+      return NSLocalizedString("kind_link", comment: "")
+    }
+    return nil
+  }
+
+  /// Secondary line: where it came from, when, and what kind it is.
+  private var subtitle: String? {
+    guard ForkStyle.rowStyle == .twoLine else { return nil }
+
+    var parts: [String] = []
+    if let application = item.application {
+      parts.append(application)
+    }
+    parts.append(Self.timeFormatter.string(from: item.item.lastCopiedAt))
+    if let kindLabel {
+      parts.append(kindLabel)
+    }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
   private func performSelect() {
     if NSEvent.modifierFlags.contains(.command) && appState.multiSelectionEnabled {
       appState.navigator.addToSelection(item: item)
@@ -49,6 +88,7 @@ struct HistoryItemView: View {
       image: item.thumbnailImage,
       accessoryImage: item.thumbnailImage != nil ? nil : colorSwatchImage,
       attributedTitle: item.attributedTitle,
+      subtitle: subtitle,
       shortcuts: item.shortcuts,
       isSelected: item.isSelected,
       selectionIndex: item.multiSelectionIndex,

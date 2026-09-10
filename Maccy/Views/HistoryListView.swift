@@ -65,6 +65,18 @@ struct HistoryListView: View {
       .padding(.vertical, Popup.verticalSeparatorPadding)
   }
 
+  /// Date sections only make sense against a date-ordered list.
+  @ViewBuilder
+  private var historyList: some View {
+    if ForkStyle.grouping == .byTime, Defaults[.sortBy] != .numberOfCopies {
+      SectionedHistoryListView(items: unpinnedItems)
+    } else {
+      MultipleSelectionListView(items: unpinnedItems) { previous, item, next, index in
+        HistoryItemView(item: item, previous: previous, next: next, index: index)
+      }
+    }
+  }
+
   var body: some View {
     let topPinsVisible = pinTo == .top && pinsVisible
     let bottomPinsVisible = pinTo == .bottom && pinsVisible
@@ -100,9 +112,7 @@ struct HistoryListView: View {
 
     ScrollView {
       ScrollViewReader { proxy in
-        MultipleSelectionListView(items: unpinnedItems) { previous, item, next, index in
-          HistoryItemView(item: item, previous: previous, next: next, index: index)
-        }
+        historyList
         .padding(.top, scrollTopPadding)
         .padding(.bottom, scrollBottomPadding)
         .task(id: appState.navigator.scrollTarget) {

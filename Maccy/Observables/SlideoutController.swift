@@ -85,6 +85,9 @@ class SlideoutController {
       onContentResize(_contentWidth)
     }
   }
+  /// Width the slideout currently contributes to the window, or zero when closed.
+  var slideoutWidthIfOpen: CGFloat { state.isOpen ? slideoutWidth : 0 }
+
   private var _slideoutWidth: CGFloat = 400
   var slideoutWidth: CGFloat {
     get { return _slideoutWidth }

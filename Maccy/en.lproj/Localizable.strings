@@ -23,3 +23,10 @@
 "history_item_image_accessibility_label_no_app" = "Image, %dx%d";
 "history_item_image_accessibility_generic" = "Image";
 "toolbar_remove_paste_stack_action" = "Stop paste stack";
+"more_actions_accessibility_label" = "More actions";
+"kind_image" = "Image";
+"kind_file" = "File";
+"kind_link" = "Link";
+"hint_copy" = "Copy";
+"hint_paste" = "Paste";
+"hint_delete" = "Delete";

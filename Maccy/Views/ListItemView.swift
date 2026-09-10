@@ -35,6 +35,8 @@ struct ListItemView<Title: View, ID: Hashable>: View {
   var image: NSImage?
   var accessoryImage: NSImage?
   var attributedTitle: AttributedString?
+  /// Secondary metadata line: source app, time, kind. Two-line rows only.
+  var subtitle: String?
   var shortcuts: [KeyShortcut]
   var isSelected: Bool
   var selectionIndex: Int?
@@ -53,6 +55,15 @@ struct ListItemView<Title: View, ID: Hashable>: View {
     selectionIndex.map { "\($0 + 1)" }
   }
 
+  private var twoLine: Bool { ForkStyle.rowStyle == .twoLine && subtitle != nil && image == nil }
+
+  /// The ⌘n badges are a power-user affordance Apple would not surface by default.
+  /// The shortcuts keep working; only the badge is hidden once the chrome is stripped.
+  private var shortcutsVisible: Bool { !ForkStyle.isActive || ForkStyle.chrome == .menu }
+
+  private var leadingInset: CGFloat { ForkStyle.isActive ? Popup.rowInset + 8 : 4 }
+  private var trailingInset: CGFloat { ForkStyle.isActive ? Popup.rowInset + 8 : 10 }
+
   var body: some View {
     HStack(spacing: 0) {
       if showIcons, let appIcon {
@@ -61,12 +72,14 @@ struct ListItemView<Title: View, ID: Hashable>: View {
           AppImageView(appImage: appIcon, size: NSSize(width: Popup.appIconSize, height: Popup.appIconSize))
           Spacer(minLength: 0)
         }
-        .padding(.leading, 4)
+        .padding(.leading, leadingInset)
         .padding(.vertical, 5)
+      } else {
+        Spacer().frame(width: leadingInset)
       }
 
       Spacer()
-        .frame(width: showIcons ? 5 : 10)
+        .frame(width: showIcons ? (ForkStyle.isActive ? 10 : 5) : (ForkStyle.isActive ? 0 : 10))
 
       if let accessoryImage {
         Image(nsImage: accessoryImage)
@@ -82,6 +95,18 @@ struct ListItemView<Title: View, ID: Hashable>: View {
           .accessibilityHidden(true)
           .padding(.trailing, 5)
           .padding(.vertical, 5)
+      } else if twoLine, let subtitle {
+        VStack(alignment: .leading, spacing: 2) {
+          ListItemTitleView(attributedTitle: attributedTitle, title: title)
+            .accessibilityHidden(true)
+          Text(subtitle)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .accessibilityHidden(true)
+        }
+        .padding(.trailing, 5)
       } else {
         ListItemTitleView(attributedTitle: attributedTitle, title: title)
           .accessibilityHidden(true)
@@ -104,7 +129,7 @@ struct ListItemView<Title: View, ID: Hashable>: View {
             .accessibilityHidden(true)
         }
 
-        if !shortcuts.isEmpty {
+        if !shortcuts.isEmpty && shortcutsVisible {
           ZStack(alignment: .trailing) {
             ForEach(shortcuts) { shortcut in
               let visible = shortcut.isVisible(shortcuts, modifierFlags.flags)
@@ -116,25 +141,56 @@ struct ListItemView<Title: View, ID: Hashable>: View {
           }
         }
       }
-      .padding(.trailing, 10)
+      .padding(.trailing, trailingInset)
     }
     .frame(minHeight: Popup.itemHeight)
     .id(id)
     .frame(maxWidth: .infinity, alignment: .leading)
     .foregroundStyle(isSelected && Popup.selectionUsesInvertedLabel ? Color.white : Color.primary)
-    // macOS 26 broke hovering if no background is present.
-    // The slight opcaity white background is a workaround
-    .background(
-      isSelected
-        ? Color.accentColor.opacity(Popup.selectionFillOpacity)
-        : Color.white.opacity(0.001)
-    )
-    .clipShape(selectionAppearance.rect(cornerRadius: Popup.cornerRadius))
+    .background(selectionBackground)
+    .modifier(BarSelectionClip(active: ForkStyle.selectionStyle == .bar, appearance: selectionAppearance))
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(accessibilityLabel))
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .accessibilityValue(Text(displaySelectionIndex ?? ""))
     .hoverSelectionId(selectionId)
     .help(help ?? "")
+  }
+
+  @ViewBuilder
+  private var selectionBackground: some View {
+    if isSelected {
+      switch ForkStyle.selectionStyle {
+      case .bar:
+        Color.accentColor.opacity(Popup.selectionFillOpacity)
+      case .pill:
+        selectionAppearance.rect(cornerRadius: Popup.cornerRadius)
+          .fill(Color.accentColor.opacity(Popup.selectionFillOpacity))
+          .padding(.horizontal, Popup.rowInset)
+      case .neutralPill:
+        selectionAppearance.rect(cornerRadius: Popup.cornerRadius)
+          .fill(Color.primary.opacity(Popup.selectionFillOpacity))
+          .padding(.horizontal, Popup.rowInset)
+      }
+    } else {
+      // macOS 26 broke hovering if no background is present.
+      // The slight opacity white background is a workaround.
+      Color.white.opacity(0.001)
+    }
+  }
+}
+
+/// Upstream clipped every row to the selection shape. That is only correct for the
+/// full-bleed bar; an inset pill must not clip the row's own content.
+private struct BarSelectionClip: ViewModifier {
+  let active: Bool
+  let appearance: SelectionAppearance
+
+  func body(content: Content) -> some View {
+    if active {
+      content.clipShape(appearance.rect(cornerRadius: Popup.cornerRadius))
+    } else {
+      content
+    }
   }
 }

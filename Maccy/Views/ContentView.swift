@@ -5,6 +5,9 @@ struct ContentView: View {
   @State private var appState = AppState.shared
   @State private var modifierFlags = ModifierFlags()
   @State private var scenePhase: ScenePhase = .background
+  /// Drives the entrance animation. System surfaces are placed, not drawn: Spotlight
+  /// scales and fades in rather than simply appearing.
+  @State private var presented: Bool = false
 
   @FocusState private var searchFocused: Bool
 
@@ -56,7 +59,18 @@ struct ContentView: View {
         try? await appState.history.load()
       }
     }
+    .scaleEffect(ForkStyle.isActive ? (presented ? 1 : 0.965) : 1, anchor: .center)
+    .opacity(ForkStyle.isActive ? (presented ? 1 : 0) : 1)
     .animation(.easeInOut(duration: 0.2), value: appState.searchVisible)
+    .onChange(of: scenePhase) {
+      if scenePhase == .active {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.85)) {
+          presented = true
+        }
+      } else {
+        presented = false
+      }
+    }
     .environment(appState)
     .environment(modifierFlags)
     .environment(\.scenePhase, scenePhase)

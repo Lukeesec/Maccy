@@ -123,6 +123,7 @@
 		DAA072D12C4089D3006DDFD2 /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA072D02C4089D3006DDFD2 /* VisualEffectView.swift */; };
 		DAA072D32C40A961006DDFD2 /* Color+Random.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA072D22C40A961006DDFD2 /* Color+Random.swift */; };
 		DAA072D52C40AC52006DDFD2 /* HistoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA072D42C40AC52006DDFD2 /* HistoryListView.swift */; };
+		66079C92083E093EC391DE0B /* SectionedHistoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D59BAFDD8B5CE5DF7E4F79BE /* SectionedHistoryListView.swift */; };
 		DAA072D72C41C574006DDFD2 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA072D62C41C574006DDFD2 /* AppState.swift */; };
 		DAA072D92C41C5AD006DDFD2 /* Footer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA072D82C41C5AD006DDFD2 /* Footer.swift */; };
 		DAA072DB2C41C5DD006DDFD2 /* FooterItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA072DA2C41C5DD006DDFD2 /* FooterItem.swift */; };
@@ -146,6 +147,7 @@
 		DAC14124232367B200FCFA30 /* Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC14123232367B200FCFA30 /* Search.swift */; };
 		DAC929D7297A0E8B00814F19 /* NSPasteboard.PasteboardType+Types.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC929D6297A0E8B00814F19 /* NSPasteboard.PasteboardType+Types.swift */; };
 		DAD665662898A1C000975096 /* KeyChord.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD665652898A1C000975096 /* KeyChord.swift */; };
+		7C4BC974485EBBA00A75F6CA /* ForkStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32CD937ED89020E5C527612 /* ForkStyle.swift */; };
 		DAE28500232257D20080E394 /* ColorImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAE284FF232257D20080E394 /* ColorImage.swift */; };
 		DAE2850223225BD90080E394 /* ColorImageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAE2850123225BD90080E394 /* ColorImageTests.swift */; };
 		DAE8F5D42C43262B00851CA9 /* Popup.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAE8F5D32C43262B00851CA9 /* Popup.swift */; };
@@ -485,6 +487,7 @@
 		DAA072D02C4089D3006DDFD2 /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
 		DAA072D22C40A961006DDFD2 /* Color+Random.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Random.swift"; sourceTree = "<group>"; };
 		DAA072D42C40AC52006DDFD2 /* HistoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryListView.swift; sourceTree = "<group>"; };
+		D59BAFDD8B5CE5DF7E4F79BE /* SectionedHistoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionedHistoryListView.swift; sourceTree = "<group>"; };
 		DAA072D62C41C574006DDFD2 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		DAA072D82C41C5AD006DDFD2 /* Footer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Footer.swift; sourceTree = "<group>"; };
 		DAA072DA2C41C5DD006DDFD2 /* FooterItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FooterItem.swift; sourceTree = "<group>"; };
@@ -564,6 +567,7 @@
 		DAC929D6297A0E8B00814F19 /* NSPasteboard.PasteboardType+Types.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSPasteboard.PasteboardType+Types.swift"; sourceTree = "<group>"; };
 		DACCD5822C93605C00BAD74C /* Maccy.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Maccy.xctestplan; sourceTree = "<group>"; };
 		DAD665652898A1C000975096 /* KeyChord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyChord.swift; sourceTree = "<group>"; };
+		F32CD937ED89020E5C527612 /* ForkStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForkStyle.swift; sourceTree = "<group>"; };
 		DADFF1382C2F58D000DB261D /* cs */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = cs; path = cs.lproj/Localizable.strings; sourceTree = "<group>"; };
 		DAE284FF232257D20080E394 /* ColorImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorImage.swift; sourceTree = "<group>"; };
 		DAE2850123225BD90080E394 /* ColorImageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorImageTests.swift; sourceTree = "<group>"; };
@@ -716,6 +720,7 @@
 				2F0EC7782E7727E3003E2EA9 /* HeightReaderModifier.swift */,
 				DA1969112C3F0DD200258481 /* HistoryItemView.swift */,
 				DAA072D42C40AC52006DDFD2 /* HistoryListView.swift */,
+				D59BAFDD8B5CE5DF7E4F79BE /* SectionedHistoryListView.swift */,
 				2F0EC7882E7743D9003E2EA9 /* HoverSelectionModifier.swift */,
 				DA19690D2C3EEFA900258481 /* KeyboardShortcutView.swift */,
 				DA19691E2C3F5F0600258481 /* KeyHandlingView.swift */,
@@ -864,6 +869,7 @@
 				2F578C3C2EFFE8400088B759 /* ItemsProtocol.swift */,
 				DABDE97E2974706C005B32E9 /* KeyboardLayout.swift */,
 				DAD665652898A1C000975096 /* KeyChord.swift */,
+				F32CD937ED89020E5C527612 /* ForkStyle.swift */,
 				DA19690F2C3F0AAC00258481 /* KeyShortcut.swift */,
 				DA05B5102C234CB1006980FE /* MaccyApp.swift */,
 				DA689FCB2C1D1D510009B887 /* MenuIcon.swift */,
@@ -1123,6 +1129,7 @@
 				DA1969142C3F11D600258481 /* PreviewItemView.swift in Sources */,
 				2FF2E9502E7808470093D72C /* AppImageView.swift in Sources */,
 				DAA072D52C40AC52006DDFD2 /* HistoryListView.swift in Sources */,
+				66079C92083E093EC391DE0B /* SectionedHistoryListView.swift in Sources */,
 				2F578C422EFFE8920088B759 /* SlideoutContentView.swift in Sources */,
 				2F578C432EFFE8920088B759 /* SlideoutView.swift in Sources */,
 				DAB082962A2B7B850053E463 /* AppStoreReview.swift in Sources */,
@@ -1137,6 +1144,7 @@
 				DA19690E2C3EEFA900258481 /* KeyboardShortcutView.swift in Sources */,
 				DA243D122C2F64830012A27F /* ContentView.swift in Sources */,
 				DAD665662898A1C000975096 /* KeyChord.swift in Sources */,
+				7C4BC974485EBBA00A75F6CA /* ForkStyle.swift in Sources */,
 				DA689FC42C1CF0F00009B887 /* AppearanceSettingsPane.swift in Sources */,
 				2F1091D72F2B6E8400F5C454 /* AsyncView.swift in Sources */,
 				DAA072E72C423617006DDFD2 /* NSSize+DefaultsSerializable.swift in Sources */,

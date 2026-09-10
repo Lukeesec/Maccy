@@ -9,7 +9,8 @@ class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
   let onClose: () -> Void
 
   override var isMovable: Bool {
-    get { Defaults[.popupPosition] != .statusItem }
+    // System surfaces are not dragged around. Spotlight sits where it sits.
+    get { ForkStyle.isActive ? false : Defaults[.popupPosition] != .statusItem }
     set {}
   }
 
@@ -22,9 +23,16 @@ class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
   ) {
     self.onClose = onClose
 
+    // Spotlight's panel is a fixed slab; dropping .resizable also removes the
+    // drag-to-resize edges that would otherwise contradict that.
+    var style: NSWindow.StyleMask = [.nonactivatingPanel, .closable, .fullSizeContentView]
+    if !ForkStyle.isActive {
+      style.insert(.resizable)
+    }
+
     super.init(
         contentRect: contentRect,
-        styleMask: [.nonactivatingPanel, .resizable, .closable, .fullSizeContentView],
+        styleMask: style,
         backing: .buffered,
         defer: false
     )
@@ -43,7 +51,7 @@ class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
     collectionBehavior = [.auxiliary, .stationary, .moveToActiveSpace, .fullScreenAuxiliary]
     titleVisibility = .hidden
     titlebarAppearsTransparent = true
-    isMovableByWindowBackground = true
+    isMovableByWindowBackground = !ForkStyle.isActive
     hidesOnDeactivate = false
     backgroundColor = .clear
     titlebarSeparatorStyle = .none
@@ -76,10 +84,15 @@ class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
   func open(height: CGFloat, at popupPosition: PopupPosition = Defaults[.popupPosition]) {
     let size = Defaults[.windowSize]
     let miniumHeight: CGFloat = AppState.shared.popup.minimumHeight
-    let finalWidth = min(frame.width, size.width)
-    let finalHeight = max(min(height, size.height), miniumHeight)
+    // Fixed width and always centred: the two things that make a panel read as a
+    // system surface rather than a utility window the user has parked somewhere.
+    let position = ForkStyle.isActive ? .center : popupPosition
+    let finalWidth = ForkStyle.isActive
+      ? Popup.panelWidth + AppState.shared.preview.slideoutWidthIfOpen
+      : min(frame.width, size.width)
+    let finalHeight = max(min(height, Popup.maxPanelHeight), miniumHeight)
     setContentSize(NSSize(width: finalWidth, height: finalHeight))
-    setFrameOrigin(popupPosition.origin(size: frame.size, statusBarButton: statusBarButton))
+    setFrameOrigin(position.origin(size: frame.size, statusBarButton: statusBarButton))
     orderFrontRegardless()
     makeKey()
     isPresented = true
