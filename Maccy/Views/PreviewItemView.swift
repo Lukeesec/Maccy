@@ -284,6 +284,10 @@ struct EditablePreviewTextView: NSViewRepresentable {
 
     if textView.string != text {
       textView.string = text
+      // Assigning .string resets the selection, and it can land after the
+      // becomeFirstResponder caret placement. Re-assert the caret here so the
+      // first keystroke extends the draft instead of replacing it.
+      textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
     }
 
     context.coordinator.syncFirstResponder(to: focused, in: textView)
