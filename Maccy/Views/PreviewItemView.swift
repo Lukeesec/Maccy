@@ -364,6 +364,9 @@ struct EditablePreviewTextView: NSViewRepresentable {
 final class PreviewTextView: NSTextView {
   var onFocusChange: (@MainActor (Bool) -> Void)?
 
+  /// Set while this view has just taken focus and nothing has been typed yet.
+  private var justFocused = false
+
   private static let passthroughKeyCodes: Set<UInt16> = [
     36,  // Return
     76,  // Enter (keypad)
@@ -375,18 +378,7 @@ final class PreviewTextView: NSTextView {
   override func becomeFirstResponder() -> Bool {
     let accepted = super.becomeFirstResponder()
     if accepted {
-      // NSTextView selects its whole contents when it takes first responder, so
-      // the first keystroke would replace the draft rather than extend it.
-      // AppKit installs that selection after this returns, and after the string
-      // assignment in updateNSView, so both earlier attempts were overwritten --
-      // the caret has to be placed a runloop turn later to survive.
-      // The identity of window.firstResponder is not reliably `self` here (AppKit
-      // may route through a field editor), so this deliberately does not guard on
-      // it -- guarding was why the two earlier attempts silently did nothing.
-      DispatchQueue.main.async { [weak self] in
-        guard let self else { return }
-        self.setSelectedRange(NSRange(location: (self.string as NSString).length, length: 0))
-      }
+      justFocused = true
       onFocusChange?(true)
     }
     return accepted
@@ -394,8 +386,37 @@ final class PreviewTextView: NSTextView {
 
   override func resignFirstResponder() -> Bool {
     let resigned = super.resignFirstResponder()
-    if resigned { onFocusChange?(false) }
+    if resigned {
+      justFocused = false
+      onFocusChange?(false)
+    }
     return resigned
+  }
+
+  override func mouseDown(with event: NSEvent) {
+    // A click places its own caret; nothing to correct.
+    justFocused = false
+    super.mouseDown(with: event)
+  }
+
+  /// Collapse the focus-time select-all at the moment of the first insertion.
+  ///
+  /// AppKit selects the whole contents when this view takes first responder, so
+  /// the first keystroke replaced the draft instead of extending it. Setting the
+  /// selection at focus time does not survive — AppKit installs its own after
+  /// `becomeFirstResponder` returns and after `updateNSView` assigns the string,
+  /// and the exact ordering is not something to guess at. Correcting it here is
+  /// timing-independent: whatever the selection ended up as, if the first typed
+  /// character would wipe the entire draft, put the caret at the end instead.
+  override func insertText(_ insertString: Any, replacementRange: NSRange) {
+    if justFocused {
+      justFocused = false
+      let length = (string as NSString).length
+      if length > 0, selectedRange() == NSRange(location: 0, length: length) {
+        setSelectedRange(NSRange(location: length, length: 0))
+      }
+    }
+    super.insertText(insertString, replacementRange: replacementRange)
   }
 
   override func keyDown(with event: NSEvent) {
