@@ -122,9 +122,11 @@ cat <<EOF
 
 Done. Running Maccy $BUILT_VERSION.
 
-Your clipboard history and settings are untouched: the bundle identifier is
-unchanged, so this build reads the same container as before
-(~/Library/Containers/org.p0deje.Maccy).
+History and settings live at ~/Library/Application Support/Maccy and
+~/Library/Preferences/org.p0deje.Maccy.plist. These builds are not sandboxed --
+an ad-hoc signature cannot satisfy the App Sandbox -- so they do not use
+~/Library/Containers/org.p0deje.Maccy. Your data was copied out of that
+container, which is left intact, so reverting to stock Maccy still finds it.
 
 One-time step: this build is ad-hoc signed, so macOS treats it as a new app for
 privacy purposes. Pasting will not work until you re-grant Accessibility:
