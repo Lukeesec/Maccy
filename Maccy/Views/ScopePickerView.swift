@@ -39,10 +39,13 @@ enum ScopePickerRow: Hashable, Identifiable {
     .settings
   ]
 
-  /// The monospaced token shown at the leading edge of the row.
+  /// The monospaced token shown at the leading edge of the row. The leading
+  /// slash is added here rather than stored on ForkScope, whose `token` is the
+  /// bare word the parser matches. Without it the scope rows read "text" while
+  /// the settings row read "/set", which looked like two different kinds of thing.
   var token: String {
     switch self {
-    case .scope(let scope): return scope.token
+    case .scope(let scope): return "/\(scope.token)"
     case .settings: return "/set"
     }
   }
