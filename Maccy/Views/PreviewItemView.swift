@@ -313,14 +313,14 @@ struct EditablePreviewTextView: NSViewRepresentable {
       guard !isSyncingFocus, let window = textView.window else { return }
 
       if !focused {
-        guard window.firstResponder === textView
-                || window.firstResponder === textView.currentEditor() else { return }
+        // NSTextView is its own field editor, so it is the first responder
+        // directly -- there is no currentEditor() indirection here.
+        guard window.firstResponder === textView else { return }
         isSyncingFocus = true
         DispatchQueue.main.async { [weak self, weak textView] in
           defer { self?.isSyncingFocus = false }
           guard let textView, let window = textView.window else { return }
-          guard window.firstResponder === textView
-                  || window.firstResponder === textView.currentEditor() else { return }
+          guard window.firstResponder === textView else { return }
           window.makeFirstResponder(nil)
         }
         return
