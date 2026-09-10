@@ -51,13 +51,13 @@ class AppState: Sendable {
     preview.slideoutWidth = Defaults[.previewWidth]
   }
 
-  @MainActor
   /// True when keyboard navigation has moved above the first row onto the header's
   /// overflow control, so it can draw itself as highlighted and answer Return.
   var overflowHighlighted: Bool = false
   /// Drives the overflow popover, so Return and a click do the same thing.
   var overflowMenuOpen: Bool = false
 
+  @MainActor
   func select(flags modifierFlags: NSEvent.ModifierFlags) {
     if !navigator.selection.isEmpty {
       if navigator.isMultiSelectInProgress {
