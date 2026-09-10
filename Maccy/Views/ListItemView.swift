@@ -42,8 +42,6 @@ struct ListItemView<Title: View, ID: Hashable>: View {
   var selectionIndex: Int?
   var help: LocalizedStringKey?
   var selectionAppearance: SelectionAppearance = .none
-  /// History rows opt in; footer and pin rows do not.
-  var showsActions: Bool = false
   // Complete description used when the row's visual content is hidden from accessibility.
   var accessibilityLabel: String = ""
   @ViewBuilder var title: () -> Title
@@ -129,10 +127,6 @@ struct ListItemView<Title: View, ID: Hashable>: View {
             )
             .foregroundStyle(Color.white)
             .accessibilityHidden(true)
-        }
-
-        if showsActions, isSelected, ForkStyle.actions == .rowTrailing {
-          ActionsButtonView()
         }
 
         if !shortcuts.isEmpty && shortcutsVisible {

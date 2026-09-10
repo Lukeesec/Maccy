@@ -171,13 +171,13 @@ script/set-style.sh rowStyle oneLine         # twoLine | oneLine | compact
 script/set-style.sh chrome stripped          # stripped | hintBar | menu
 script/set-style.sh selectionStyle neutralPill  # pill | neutralPill | bar
 script/set-style.sh grouping none            # byTime | none
-script/set-style.sh actions searchRow        # rowTrailing | searchRow | hintBar | none
+script/set-style.sh actions searchRow        # searchRow | hintBar | none
 script/set-style.sh showIcons false          # true | false
 script/set-style.sh autoPreview true         # true | false
 script/set-style.sh rowStyle default         # clear an override
 ```
 
-Defaults: `twoLine` / `hintBar` / `pill` / `byTime` / `rowTrailing`, icons on,
+Defaults: `twoLine` / `hintBar` / `pill` / `byTime`, actions `none`, icons on,
 auto-preview off.
 
 `actions` decides where the actions affordance lives and therefore how it is
@@ -185,8 +185,6 @@ reached. Tab focuses it in every placement, Shift-Tab and Left arrow leave it,
 Return opens it. Right arrow also reaches it, but only when the search field is
 empty — otherwise it has a caret to move.
 
-- `rowTrailing` — a circular button on the selected row, the way Spotlight
-  attaches actions to the result rather than to the window.
 - `searchRow` — one glyph in the search row.
 - `hintBar` — one glyph in the bottom bar, leaving the search row clean.
 - `none` — no affordance at all, which is what Spotlight itself does. `⌘,` still

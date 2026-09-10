@@ -31,6 +31,18 @@ struct ListHeaderView: View {
           if scenePhase == .background && !searchQuery.isEmpty {
             searchQuery = ""
           }
+          if scenePhase == .background {
+            // The panel is reused between showings, so a picker left open would
+            // still be down the next time it appears.
+            appState.closeScopePicker()
+          }
+        }
+        // Typing is how the picker is dismissed by carrying on: the first
+        // character lands in the field and the menu gets out of the way.
+        .onChange(of: searchQuery) {
+          if !searchQuery.isEmpty && appState.scopePickerOpen {
+            appState.closeScopePicker()
+          }
         }
         // Only reliable way to disable the cursor. allowsHitTesting() does not work
         .offset(y: appState.searchVisible ? 0 : -Popup.searchFieldHeight)

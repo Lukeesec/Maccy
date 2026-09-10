@@ -21,6 +21,21 @@ struct ListItemTitleView<Title: View>: View {
         .truncationMode(truncation)
         // Workaround for macOS 26 to avoid flipped text
         // https://github.com/p0deje/Maccy/issues/1113
+        //
+        // This rasterises every row title offscreen and is the most expensive
+        // thing in a row, so it was re-examined (2026-09) to see whether it could
+        // go. It cannot, on the evidence available:
+        //
+        //   - upstream master still ships it, unchanged;
+        //   - #1113 was only ever closed by this workaround, and #1163, #1214 and
+        //     #1219 are the same flipped/mirrored text reported again;
+        //   - the underlying fault is in the system's own text rendering, not in
+        //     Maccy -- the same inverted-UI bug shows up in Finder dialogs and
+        //     menu bar apps on Tahoe -- and there is no Apple release note or
+        //     report saying a 26.x update fixed it.
+        //
+        // Removing it on a guess trades a measurable cost for an unreadable list,
+        // so it stays until someone can reproduce the bug being gone.
         .drawingGroup()
     }
   }

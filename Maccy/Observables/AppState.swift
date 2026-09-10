@@ -57,6 +57,80 @@ class AppState: Sendable {
   /// Drives the actions popover, so Return and a click do the same thing.
   var actionsMenuOpen: Bool = false
 
+  // MARK: - Scope
+
+  /// The scope the history is filtered to, rendered as a chip in the search
+  /// field. It lives on History, which owns the filtering, so setting it here
+  /// re-runs the query rather than leaving two copies of the truth around.
+  var scope: ForkScope {
+    get { history.scope }
+    set { history.scope = newValue }
+  }
+
+  /// Whether the scope dropdown is showing. While it is, it owns the arrows,
+  /// Return and Escape -- a menu takes those from whatever is behind it.
+  var scopePickerOpen: Bool = false
+
+  /// Row the scope dropdown has highlighted. Meaningless while it is closed.
+  var scopePickerSelection: ScopePickerRow = .scope(.all)
+
+  @MainActor
+  func openScopePicker() {
+    guard ForkStyle.isActive, !scopePickerOpen else { return }
+    // Open on what is already committed, so Return with no movement is a no-op
+    // rather than a silent reset to "All items".
+    scopePickerSelection = .scope(scope)
+    scopePickerOpen = true
+  }
+
+  func closeScopePicker() {
+    scopePickerOpen = false
+  }
+
+  @MainActor
+  func toggleScopePicker() {
+    if scopePickerOpen {
+      closeScopePicker()
+    } else {
+      openScopePicker()
+    }
+  }
+
+  /// Moves the highlight, wrapping at both ends the way a menu does.
+  func moveScopePickerSelection(by delta: Int) {
+    let rows = ScopePickerRow.ordered
+    guard !rows.isEmpty else { return }
+    guard let index = rows.firstIndex(of: scopePickerSelection) else {
+      scopePickerSelection = rows[0]
+      return
+    }
+
+    let count = rows.count
+    scopePickerSelection = rows[((index + delta) % count + count) % count]
+  }
+
+  @MainActor
+  func commitScopePicker() {
+    let row = scopePickerSelection
+    scopePickerOpen = false
+
+    switch row {
+    case .scope(let newScope):
+      scope = newScope
+    case .settings:
+      // Same call as the footer's Preferences row and ⌘,. The settings window
+      // taking key closes the panel on its own, via FloatingPanel.resignKey.
+      openPreferences()
+    }
+  }
+
+  /// Removes the chip, which is what Backspace on an empty query means.
+  @MainActor
+  func clearScope() {
+    guard scope != .all else { return }
+    scope = .all
+  }
+
   @MainActor
   func select(flags modifierFlags: NSEvent.ModifierFlags) {
     if !navigator.selection.isEmpty {

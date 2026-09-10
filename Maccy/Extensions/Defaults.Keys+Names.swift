@@ -31,7 +31,7 @@ extension Defaults.Keys {
     "forkSelectionStyle", default: .pill, suite: preferencesSuite
   )
   static let forkGrouping = Key<ForkGrouping>("forkGrouping", default: .byTime, suite: preferencesSuite)
-  static let forkActions = Key<ForkActions>("forkActions", default: .rowTrailing, suite: preferencesSuite)
+  static let forkActions = Key<ForkActions>("forkActions", default: .none, suite: preferencesSuite)
 
   static let clearOnQuit = Key<Bool>("clearOnQuit", default: false, suite: preferencesSuite)
   static let clearSystemClipboard = Key<Bool>("clearSystemClipboard", default: false, suite: preferencesSuite)

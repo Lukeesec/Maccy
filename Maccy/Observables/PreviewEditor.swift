@@ -1,0 +1,89 @@
+import Foundation
+import Observation
+
+/// A scratch buffer for the preview pane.
+///
+/// The preview is editable, but editing is *not* a way to rewrite history. The
+/// draft never touches the stored `HistoryItem`; it only changes what a copy or a
+/// paste puts on the pasteboard. That promise is what the "Edited" badge in the
+/// pane is advertising, so the invariant matters: nothing here writes back to the
+/// model, and the draft is thrown away the moment the selection moves or the popup
+/// closes.
+@MainActor
+@Observable
+final class PreviewEditor {
+  static let shared = PreviewEditor()
+
+  /// True when keyboard focus is inside the preview pane.
+  var isFocused: Bool = false
+
+  /// True when `draft` differs from the item's original text.
+  ///
+  /// Maintained by `draft`'s setter rather than computed, so callers can read it
+  /// without re-comparing the whole string on every layout pass.
+  var isEdited: Bool = false
+
+  /// The scratch text being edited.
+  ///
+  /// Backed by a separate stored property so the setter can keep `isEdited` in
+  /// step. `@Observable` still tracks reads through the getter, so bindings and
+  /// `body` invalidation work exactly as they would for a plain stored property.
+  var draft: String {
+    get { draftStorage }
+    set {
+      guard newValue != draftStorage else { return }
+      draftStorage = newValue
+      isEdited = newValue != original
+    }
+  }
+
+  /// The draft when it has actually been edited, otherwise nil.
+  ///
+  /// The copy path uses this: nil means "copy the item as stored".
+  var effectiveText: String? { isEdited ? draft : nil }
+
+  private var draftStorage: String = ""
+
+  /// The item's text as it was loaded. Not observed: it only ever changes inside
+  /// `begin(item:)`, which also writes `draft`, and that write is what should
+  /// invalidate views.
+  @ObservationIgnored private var original: String = ""
+
+  /// Which item `draft` was loaded from, so that re-rendering the same row does
+  /// not throw away an in-flight edit.
+  @ObservationIgnored private var itemID: UUID?
+
+  /// Load the item's text into `draft` and clear the edited flag.
+  ///
+  /// Passing nil resets. Calling it again with the item that is already loaded is
+  /// a no-op, so a redraw of the same row keeps the user's edit; calling it with a
+  /// different item discards the draft, which is the selection-moved case.
+  func begin(item: HistoryItemDecorator?) {
+    guard let item else {
+      reset()
+      return
+    }
+
+    guard item.id != itemID else { return }
+
+    itemID = item.id
+    original = item.previewText
+    draftStorage = original
+    isEdited = false
+    isFocused = false
+  }
+
+  /// Throw the draft away and clear the edited flag.
+  func discard() {
+    draftStorage = original
+    isEdited = false
+  }
+
+  private func reset() {
+    itemID = nil
+    original = ""
+    draftStorage = ""
+    isEdited = false
+    isFocused = false
+  }
+}

@@ -30,3 +30,13 @@
 "hint_copy" = "Copy";
 "hint_paste" = "Paste";
 "hint_delete" = "Delete";
+"scope_all" = "All items";
+"scope_text" = "Text";
+"scope_links" = "Links";
+"scope_images" = "Images";
+"scope_files" = "Files";
+"scope_settings" = "Settings…";
+"scope_picker_accessibility_label" = "Filter by kind";
+"preview_edited_badge" = "Edited";
+"preview_copy_edited" = "Copy edited";
+"preview_paste_edited" = "Paste edited";

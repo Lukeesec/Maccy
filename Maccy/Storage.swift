@@ -1,9 +1,28 @@
+import Defaults
 import Foundation
 import SwiftData
 
 @MainActor
 class Storage {
   static let shared = Storage()
+
+  /// Store-side equivalent of `Sorter`'s ordering.
+  ///
+  /// `History` pages the store instead of fetching everything at launch, so the
+  /// store has to hand back rows in the same order `Sorter` would put them in —
+  /// otherwise page two is not the continuation of page one. Pinning is applied
+  /// afterwards by `Sorter`, because pinned items are fetched separately and in
+  /// full; this only covers `Defaults[.sortBy]`.
+  nonisolated static func historySortDescriptors(by: Sorter.By = Defaults[.sortBy]) -> [SortDescriptor<HistoryItem>] {
+    switch by {
+    case .firstCopiedAt:
+      return [SortDescriptor(\HistoryItem.firstCopiedAt, order: .reverse)]
+    case .numberOfCopies:
+      return [SortDescriptor(\HistoryItem.numberOfCopies, order: .reverse)]
+    default:
+      return [SortDescriptor(\HistoryItem.lastCopiedAt, order: .reverse)]
+    }
+  }
 
   var container: ModelContainer
   var context: ModelContext { container.mainContext }
@@ -31,6 +50,46 @@ class Storage {
     } catch let error {
       fatalError("Cannot load database: \(error.localizedDescription).")
     }
+  }
+
+  /// Every pinned item. There are at most a couple of dozen of these — the pin
+  /// characters are a fixed alphabet — so they are always fetched in full and
+  /// never paged, which keeps them correctly placed from the very first page.
+  func fetchPinnedHistoryItems() throws -> [HistoryItem] {
+    try context.fetch(
+      FetchDescriptor<HistoryItem>(predicate: #Predicate<HistoryItem> { $0.pin != nil })
+    )
+  }
+
+  /// One page of unpinned items in `Defaults[.sortBy]` order.
+  func fetchUnpinnedHistoryItems(
+    offset: Int,
+    limit: Int,
+    sortBy: [SortDescriptor<HistoryItem>] = Storage.historySortDescriptors()
+  ) throws -> [HistoryItem] {
+    var descriptor = FetchDescriptor<HistoryItem>(
+      predicate: #Predicate<HistoryItem> { $0.pin == nil },
+      sortBy: sortBy
+    )
+    descriptor.fetchOffset = offset
+    descriptor.fetchLimit = limit
+
+    return try context.fetch(descriptor)
+  }
+
+  /// Items whose title contains `query`, answered by SQLite rather than by
+  /// walking every decorator in memory.
+  ///
+  /// `localizedStandardContains` is case *and* diacritic insensitive, so the
+  /// result is a superset of what `Search`'s case-insensitive `range(of:)` would
+  /// match. That matters: callers use this only to narrow the candidate set and
+  /// then run the real matcher over it, so a superset cannot change the answer.
+  func fetchHistoryItems(titleContaining query: String) throws -> [HistoryItem] {
+    try context.fetch(
+      FetchDescriptor<HistoryItem>(
+        predicate: #Predicate<HistoryItem> { $0.title.localizedStandardContains(query) }
+      )
+    )
   }
 
   func cleanupOrphanedContents() throws -> Int {

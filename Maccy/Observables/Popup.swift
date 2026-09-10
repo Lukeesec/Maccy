@@ -30,54 +30,38 @@ class Popup {
   static let panelWidth: CGFloat = 720
 
   /// Spotlight is a short slab that grows with results rather than a tall column.
+  ///
+  /// The pre-Tahoe branch stays live: upstream lets the user resize the panel and
+  /// writes the new size back to `windowSize` while the app is running.
   static var maxPanelHeight: CGFloat {
-    ForkStyle.isActive ? 560 : Defaults[.windowSize].height
+    Metrics.shared.isActive ? Metrics.spotlightPanelHeight : Defaults[.windowSize].height
   }
 
   /// One dominant curve on the panel, rather than a radius derived from the items.
-  static var windowCornerRadius: CGFloat {
-    ForkStyle.isActive ? 26 : cornerRadius + horizontalPadding
-  }
+  static var windowCornerRadius: CGFloat { Metrics.shared.windowCornerRadius }
 
-  static var verticalPadding: CGFloat { ForkStyle.isActive ? 8 : 5 }
-  static var horizontalPadding: CGFloat { ForkStyle.isActive ? 10 : 5 }
+  static var verticalPadding: CGFloat { Metrics.shared.verticalPadding }
+  static var horizontalPadding: CGFloat { Metrics.shared.horizontalPadding }
 
   /// Horizontal inset of a row's selection pill from the panel edge. System lists
   /// never run their selection edge to edge.
-  static var rowInset: CGFloat { ForkStyle.isActive ? 8 : 0 }
+  static var rowInset: CGFloat { Metrics.shared.rowInset }
 
   // The search row is the hero: tall, large type, no competing title.
-  static var searchFieldHeight: CGFloat { ForkStyle.isActive ? 56 : 23 }
-  static var searchFontSize: CGFloat { ForkStyle.isActive ? 21 : 13 }
-  static var searchIconSize: CGFloat { ForkStyle.isActive ? 19 : 11 }
-  static var searchIconSpacing: CGFloat { ForkStyle.isActive ? 12 : 5 }
+  static var searchFieldHeight: CGFloat { Metrics.shared.searchFieldHeight }
+  static var searchFontSize: CGFloat { Metrics.shared.searchFontSize }
+  static var searchIconSize: CGFloat { Metrics.shared.searchIconSize }
+  static var searchIconSpacing: CGFloat { Metrics.shared.searchIconSpacing }
 
   /// Row height follows the row variant.
-  static var itemHeight: CGFloat {
-    switch ForkStyle.rowStyle {
-    case .twoLine: return 52
-    case .oneLine: return 36
-    case .compact: return ForkStyle.isActive ? 24 : 22
-    }
-  }
+  static var itemHeight: CGFloat { Metrics.shared.itemHeight }
 
-  static var appIconSize: CGFloat {
-    switch ForkStyle.rowStyle {
-    case .twoLine: return 26
-    case .oneLine: return 18
-    case .compact: return 15
-    }
-  }
+  static var appIconSize: CGFloat { Metrics.shared.appIconSize }
 
   /// Radius of the selection pill.
-  static var cornerRadius: CGFloat {
-    if ForkStyle.isActive {
-      return ForkStyle.rowStyle == .twoLine ? 10 : 8
-    }
-    return 4
-  }
+  static var cornerRadius: CGFloat { Metrics.shared.cornerRadius }
 
-  static var sectionHeaderHeight: CGFloat { 28 }
+  static var sectionHeaderHeight: CGFloat { Metrics.sectionHeaderHeight }
 
   // Alpha of the semantic tint applied to the glass. NSGlassEffectView takes its
   // cast from whatever sits behind the window, so on a light wallpaper the panel
@@ -87,16 +71,10 @@ class Popup {
   static let glassTintAlpha: CGFloat = 0.55
 
   /// Fill opacity of the selection, by variant.
-  static var selectionFillOpacity: CGFloat {
-    switch ForkStyle.selectionStyle {
-    case .pill: return 0.22
-    case .neutralPill: return 0.10
-    case .bar: return 0.8
-    }
-  }
+  static var selectionFillOpacity: CGFloat { Metrics.shared.selectionFillOpacity }
 
   /// Only upstream's full-bleed bar forces a white label.
-  static var selectionUsesInvertedLabel: Bool { ForkStyle.selectionStyle == .bar }
+  static var selectionUsesInvertedLabel: Bool { Metrics.shared.selectionUsesInvertedLabel }
 
   var needsResize = false
   var height: CGFloat = 0
@@ -271,5 +249,78 @@ class Popup {
 
   private func allModifiersReleased(_ event: NSEvent) -> Bool {
     return event.modifierFlags.isDisjoint(with: .deviceIndependentFlagsMask)
+  }
+}
+
+/// Every metric above, resolved once at first use.
+///
+/// They derive from `ForkStyle`, which derives from UserDefaults, and a row asks
+/// for several of them on every layout pass. None of them can change inside a
+/// running process -- the style switcher quits and relaunches Maccy -- so they are
+/// computed together the first time one is asked for and cached from then on.
+/// `Popup`'s public surface is unchanged; only the storage behind it moved.
+private struct Metrics {
+  static let shared = Metrics()
+
+  /// Not derived from anything, so they stay plain constants.
+  static let spotlightPanelHeight: CGFloat = 560
+  static let sectionHeaderHeight: CGFloat = 28
+
+  let isActive: Bool
+  let windowCornerRadius: CGFloat
+  let verticalPadding: CGFloat
+  let horizontalPadding: CGFloat
+  let rowInset: CGFloat
+  let searchFieldHeight: CGFloat
+  let searchFontSize: CGFloat
+  let searchIconSize: CGFloat
+  let searchIconSpacing: CGFloat
+  let itemHeight: CGFloat
+  let appIconSize: CGFloat
+  let cornerRadius: CGFloat
+  let selectionFillOpacity: CGFloat
+  let selectionUsesInvertedLabel: Bool
+
+  init() {
+    let active = ForkStyle.isActive
+    let rowStyle = ForkStyle.rowStyle
+    let selectionStyle = ForkStyle.selectionStyle
+
+    isActive = active
+    verticalPadding = active ? 8 : 5
+    horizontalPadding = active ? 10 : 5
+    rowInset = active ? 8 : 0
+    searchFieldHeight = active ? 56 : 23
+    searchFontSize = active ? 21 : 13
+    searchIconSize = active ? 19 : 11
+    searchIconSpacing = active ? 12 : 5
+
+    switch rowStyle {
+    case .twoLine:
+      itemHeight = 52
+      appIconSize = 26
+    case .oneLine:
+      itemHeight = 36
+      appIconSize = 18
+    case .compact:
+      itemHeight = active ? 24 : 22
+      appIconSize = 15
+    }
+
+    let radius: CGFloat
+    if active {
+      radius = rowStyle == .twoLine ? 10 : 8
+    } else {
+      radius = 4
+    }
+    cornerRadius = radius
+    windowCornerRadius = active ? 26 : radius + horizontalPadding
+
+    switch selectionStyle {
+    case .pill: selectionFillOpacity = 0.22
+    case .neutralPill: selectionFillOpacity = 0.10
+    case .bar: selectionFillOpacity = 0.8
+    }
+    selectionUsesInvertedLabel = selectionStyle == .bar
   }
 }

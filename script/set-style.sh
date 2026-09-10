@@ -31,7 +31,7 @@ Variants:
   chrome            stripped | hintBar | menu
   selectionStyle    pill | neutralPill | bar
   grouping          byTime | none
-  actions           rowTrailing | searchRow | hintBar | none
+  actions           searchRow | hintBar | none
   showIcons         true | false
   autoPreview       true | false
 

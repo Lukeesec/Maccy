@@ -22,15 +22,25 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
   var searchQuery: String = "" {
     didSet {
       throttler.throttle { [self] in
-        updateItems(search.search(string: searchQuery, within: all))
-
-        if searchQuery.isEmpty {
-          AppState.shared.navigator.select(item: unpinnedItems.first)
-        } else {
-          AppState.shared.navigator.highlightFirst()
+        Task { @MainActor in
+          refreshItems(resetSelection: true)
         }
+      }
+    }
+  }
 
-        AppState.shared.popup.needsResize = true
+  /// Spotlight-style scope filter. Inert unless `ForkStyle.isActive`, so macOS 14
+  /// and 15 keep upstream's unfiltered list.
+  ///
+  /// Changing it goes through exactly the same refresh path as changing
+  /// `searchQuery`: the scope narrows the candidate set, the search then runs
+  /// over what is left.
+  var scope: ForkScope = .all {
+    didSet {
+      guard oldValue != scope else { return }
+
+      Task { @MainActor in
+        refreshItems(resetSelection: true)
       }
     }
   }
@@ -52,12 +62,20 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     return items.first { $0.shortcuts.contains(where: { $0.key == key }) }
   }
 
+  // Enough rows to fill the popup at its tallest, so the first paint is complete.
+  // The rest arrives page by page without blocking the main actor.
+  private static let firstPageSize = 60
+  private static let pageSize = 120
+
   private let search = Search()
   private let sorter = Sorter()
   private let throttler = Throttler(minimumDelay: 0.2)
 
   @ObservationIgnored
   private var sessionLog: [Int: HistoryItem] = [:]
+
+  @ObservationIgnored
+  private var loadTask: Task<Void, Never>?
 
   // The distinction between `all` and `items` is the following:
   // - `all` stores all history items, even the ones that are currently hidden by a search
@@ -103,18 +121,151 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
 
   @MainActor
   func load() async throws {
-    let descriptor = FetchDescriptor<HistoryItem>()
-    let results = try Storage.shared.context.fetch(descriptor)
-    all = sorter.sort(results).map { HistoryItemDecorator($0) }
-    items = all
+    loadTask?.cancel()
+    loadTask = nil
+
+    guard ForkStyle.isActive else {
+      let descriptor = FetchDescriptor<HistoryItem>()
+      let results = try Storage.shared.context.fetch(descriptor)
+      all = sorter.sort(results).map { HistoryItemDecorator($0) }
+      items = all
+
+      limitHistorySize(to: Defaults[.size])
+
+      updateShortcuts()
+      // Ensure that panel size is proper *after* loading all items.
+      Task {
+        AppState.shared.popup.needsResize = true
+      }
+      return
+    }
+
+    // Pinned items are few - the pin alphabet is a fixed 21 characters - and
+    // `Sorter` has to place them relative to everything else, so they are always
+    // fetched in full. Only unpinned items are paged.
+    let pinned = (try? Storage.shared.fetchPinnedHistoryItems()) ?? []
+    let firstPage = (try? Storage.shared.fetchUnpinnedHistoryItems(
+      offset: 0,
+      limit: Self.firstPageSize
+    )) ?? []
+
+    all = sorter.sort(pinned + firstPage).map { HistoryItemDecorator($0) }
+    refreshItems(resetSelection: false)
+    updateShortcuts()
+    AppState.shared.popup.needsResize = true
+
+    guard firstPage.count == Self.firstPageSize else {
+      // The whole history fits in one page, so there is nothing to continue.
+      limitHistorySize(to: Defaults[.size])
+      updateShortcuts()
+      return
+    }
+
+    loadTask = Task { @MainActor [weak self] in
+      await self?.loadRemainder(from: Self.firstPageSize)
+    }
+  }
+
+  /// Page in everything after the first page, yielding between pages so the
+  /// popup stays responsive while it happens.
+  @MainActor
+  private func loadRemainder(from start: Int) async {
+    var offset = start
+
+    while !Task.isCancelled {
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+
+      guard let page = try? Storage.shared.fetchUnpinnedHistoryItems(
+        offset: offset,
+        limit: Self.pageSize
+      ), !page.isEmpty else {
+        break
+      }
+
+      offset += page.count
+      merge(page)
+
+      if page.count < Self.pageSize {
+        break
+      }
+    }
+
+    guard !Task.isCancelled else { return }
 
     limitHistorySize(to: Defaults[.size])
-
     updateShortcuts()
-    // Ensure that panel size is proper *after* loading all items.
-    Task {
-      AppState.shared.popup.needsResize = true
+    AppState.shared.popup.needsResize = true
+    loadTask = nil
+  }
+
+  /// Fold a freshly paged batch into `all`, keeping `Sorter`'s ordering.
+  ///
+  /// The batch is deduplicated against what is already loaded because a copy
+  /// made mid-load shifts the store's offsets under us.
+  @MainActor
+  private func merge(_ page: [HistoryItem]) {
+    let known = Set(all.map { ObjectIdentifier($0.item) })
+    let fresh = page.filter { !known.contains(ObjectIdentifier($0)) }
+    guard !fresh.isEmpty else { return }
+
+    var decorators: [ObjectIdentifier: HistoryItemDecorator] = [:]
+    for decorator in all {
+      decorators[ObjectIdentifier(decorator.item)] = decorator
     }
+    for item in fresh {
+      decorators[ObjectIdentifier(item)] = HistoryItemDecorator(item)
+    }
+
+    all = sorter.sort(all.map(\.item) + fresh).compactMap { decorators[ObjectIdentifier($0)] }
+
+    // Never steal the selection from someone who is already navigating or typing.
+    refreshItems(resetSelection: false)
+    AppState.shared.popup.needsResize = true
+  }
+
+  /// `all`, narrowed to the active scope. Identical to `all` on macOS 14 and 15,
+  /// and whenever the scope is `.all`.
+  @MainActor
+  private func scopedItems() -> [HistoryItemDecorator] {
+    guard ForkStyle.isActive, scope != .all else {
+      return all
+    }
+
+    return all.filter { scope.matches($0.item) }
+  }
+
+  /// The candidate set a search runs over: the scoped items, narrowed further by
+  /// the store when the search mode allows it losslessly.
+  @MainActor
+  private func searchCandidates() -> [HistoryItemDecorator] {
+    let scoped = scopedItems()
+
+    guard ForkStyle.isActive,
+          !searchQuery.isEmpty,
+          Search.canNarrowInStore(Defaults[.searchMode]),
+          let matched = try? Storage.shared.fetchHistoryItems(titleContaining: searchQuery) else {
+      return scoped
+    }
+
+    let ids = Set(matched.map { ObjectIdentifier($0) })
+    return scoped.filter { ids.contains(ObjectIdentifier($0.item)) }
+  }
+
+  /// The single place `items` is recomputed from `all`, the scope and the query.
+  @MainActor
+  private func refreshItems(resetSelection: Bool) {
+    updateItems(search.search(string: searchQuery, within: searchCandidates()))
+
+    guard resetSelection else { return }
+
+    if searchQuery.isEmpty {
+      AppState.shared.navigator.select(item: unpinnedItems.first)
+    } else {
+      AppState.shared.navigator.highlightFirst()
+    }
+
+    AppState.shared.popup.needsResize = true
   }
 
   @MainActor
@@ -192,7 +343,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
         all.insert(itemDecorator, at: index)
       }
 
-      items = all
+      items = scopedItems()
       updateUnpinnedShortcuts()
       AppState.shared.popup.needsResize = true
     }
@@ -223,7 +374,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       }
       all.removeAll(where: \.isUnpinned)
       sessionLog.removeValues { $0.pin == nil }
-      items = all
+      items = scopedItems()
 
       try? Storage.shared.context.transaction {
         try? Storage.shared.context.delete(
@@ -254,7 +405,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       }
       all.removeAll()
       sessionLog.removeAll()
-      items = all
+      items = scopedItems()
 
       do {
         let context = Storage.shared.context
@@ -325,15 +476,38 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     item.cleanupImages()
   }
 
+  /// Put `item` on the clipboard, or - when the preview has been edited in place -
+  /// the edited text instead.
+  ///
+  /// The scratch edit only ever changes what lands on the pasteboard. The stored
+  /// `HistoryItem` is left exactly as it was; the edited text comes back around
+  /// as a new clipboard entry like any other copy made from inside Maccy.
+  @MainActor
+  private func copyToPasteboard(_ item: HistoryItemDecorator, editedText: String?, removeFormatting: Bool) {
+    if let editedText {
+      Clipboard.shared.copyInMaccy(editedText)
+    } else {
+      Clipboard.shared.copy(item.item, removeFormatting: removeFormatting)
+    }
+  }
+
   @MainActor
   func select(_ item: HistoryItemDecorator?, flags modifierFlags: NSEvent.ModifierFlags) {
     guard let item else {
       return
     }
 
+    // Read the draft before anything closes the popup, so it cannot be discarded
+    // out from under us by whatever the close path does to the editor.
+    let editedText: String? = ForkStyle.isActive ? PreviewEditor.shared.effectiveText : nil
+
     if modifierFlags.isEmpty {
       AppState.shared.popup.close()
-      Clipboard.shared.copy(item.item, removeFormatting: Defaults[.removeFormattingByDefault])
+      copyToPasteboard(
+        item,
+        editedText: editedText,
+        removeFormatting: Defaults[.removeFormattingByDefault]
+      )
       if Defaults[.pasteByDefault] {
         Clipboard.shared.paste()
       }
@@ -341,18 +515,22 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       switch HistoryItemAction(modifierFlags) {
       case .copy:
         AppState.shared.popup.close()
-        Clipboard.shared.copy(item.item)
+        copyToPasteboard(item, editedText: editedText, removeFormatting: false)
       case .paste:
         AppState.shared.popup.close()
-        Clipboard.shared.copy(item.item)
+        copyToPasteboard(item, editedText: editedText, removeFormatting: false)
         Clipboard.shared.paste()
       case .pasteWithoutFormatting:
         AppState.shared.popup.close()
-        Clipboard.shared.copy(item.item, removeFormatting: true)
+        copyToPasteboard(item, editedText: editedText, removeFormatting: true)
         Clipboard.shared.paste()
       case .unknown:
         return
       }
+    }
+
+    if ForkStyle.isActive {
+      PreviewEditor.shared.discard()
     }
 
     Task {
@@ -459,7 +637,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       all.insert(item, at: newIndex)
     }
 
-    items = all
+    items = scopedItems()
 
     searchQuery = ""
     updateUnpinnedShortcuts()

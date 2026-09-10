@@ -59,15 +59,15 @@ enum ForkSelectionStyle: String, CaseIterable, Identifiable, Defaults.Serializab
 
 /// Where the actions affordance lives, and therefore how it is reached.
 ///
+/// The per-row variant was removed: a circular button on every selected row read
+/// as clutter rather than as an affordance. Right arrow, which used to reach it,
+/// now opens the preview.
+///
 /// Arrowing up out of the list into a toolbar glyph is not a macOS idiom --
 /// nothing in the system navigates from a list into its own chrome that way.
 /// These all use Tab, which is what macOS uses to move focus between controls,
 /// plus Right arrow when the search field is empty.
 enum ForkActions: String, CaseIterable, Identifiable, Defaults.Serializable {
-  /// A circular button at the trailing edge of the selected row, the way
-  /// Spotlight puts per-result actions on the result itself. Right arrow reaches
-  /// it, Left arrow goes back.
-  case rowTrailing
   /// One glyph at the trailing edge of the search row. Tab reaches it.
   case searchRow
   /// One glyph at the right of the bottom hint bar, keeping the search row clean.
@@ -90,16 +90,46 @@ enum ForkGrouping: String, CaseIterable, Identifiable, Defaults.Serializable {
 }
 
 enum ForkStyle {
-  /// The redesign only applies on macOS 26. Everything below falls back to upstream.
-  static var isActive: Bool {
-    if #available(macOS 26.0, *) { return true } else { return false }
+  /// Every variant, resolved once at first use.
+  ///
+  /// These are read several times per row per layout pass -- row height, icon
+  /// size, insets, selection shape -- and each read used to reach into
+  /// UserDefaults. Nothing here can change inside a running process: the
+  /// switcher script writes the plist and then quits and relaunches Maccy, which
+  /// is the only supported way to change a variant. So resolve the whole set on
+  /// first touch and hand out the cached values afterwards.
+  private struct Resolved {
+    let isActive: Bool
+    let rowStyle: ForkRowStyle
+    let chrome: ForkChrome
+    let selectionStyle: ForkSelectionStyle
+    let grouping: ForkGrouping
+    let actions: ForkActions
+
+    init() {
+      let active: Bool
+      if #available(macOS 26.0, *) { active = true } else { active = false }
+
+      isActive = active
+      rowStyle = active ? Defaults[.forkRowStyle] : .compact
+      chrome = active ? Defaults[.forkChrome] : .menu
+      selectionStyle = active ? Defaults[.forkSelectionStyle] : .bar
+      grouping = active ? Defaults[.forkGrouping] : ForkGrouping.none
+      actions = active ? Defaults[.forkActions] : ForkActions.none
+    }
   }
 
-  static var rowStyle: ForkRowStyle { isActive ? Defaults[.forkRowStyle] : .compact }
-  static var chrome: ForkChrome { isActive ? Defaults[.forkChrome] : .menu }
-  static var selectionStyle: ForkSelectionStyle { isActive ? Defaults[.forkSelectionStyle] : .bar }
-  static var grouping: ForkGrouping { isActive ? Defaults[.forkGrouping] : .none }
-  static var actions: ForkActions { isActive ? Defaults[.forkActions] : .none }
+  /// `static let` is lazy and initialised exactly once, so this is the cache.
+  private static let resolved = Resolved()
+
+  /// The redesign only applies on macOS 26. Everything below falls back to upstream.
+  static var isActive: Bool { resolved.isActive }
+
+  static var rowStyle: ForkRowStyle { resolved.rowStyle }
+  static var chrome: ForkChrome { resolved.chrome }
+  static var selectionStyle: ForkSelectionStyle { resolved.selectionStyle }
+  static var grouping: ForkGrouping { resolved.grouping }
+  static var actions: ForkActions { resolved.actions }
 }
 
 /// Section a history item falls into when grouping by time.

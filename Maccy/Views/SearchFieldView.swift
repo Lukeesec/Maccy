@@ -16,21 +16,36 @@ struct SearchFieldView: View {
 
   /// Spotlight's search row: the field is the hero. No box, no border, large type,
   /// sitting directly on the glass with the glyph as the only ornament.
+  ///
+  /// The scope lives in the row rather than beside it: a chevron at the far left
+  /// that opens the picker, and, once a scope is committed, a chip in front of
+  /// the query text that the caret types after and Backspace deletes.
   private var heroField: some View {
     HStack(spacing: Popup.searchIconSpacing) {
-      Image(systemName: "magnifyingglass")
-        .font(.system(size: Popup.searchIconSize, weight: .regular))
-        .foregroundStyle(.secondary)
-        .accessibilityHidden(true)
+      HStack(spacing: 6) {
+        ScopeIndicatorView()
 
-      TextField(placeholder, text: $query)
-        .disableAutocorrection(true)
-        .lineLimit(1)
-        .textFieldStyle(.plain)
-        .font(.system(size: Popup.searchFontSize, weight: .regular))
-        .onSubmit {
-          appState.select(flags: .currentModifierFlags)
+        Image(systemName: "magnifyingglass")
+          .font(.system(size: Popup.searchIconSize, weight: .regular))
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+      }
+
+      HStack(spacing: 8) {
+        if appState.scope != .all {
+          ScopeChipView(scope: appState.scope)
+            .transition(.opacity)
         }
+
+        TextField(placeholder, text: $query)
+          .disableAutocorrection(true)
+          .lineLimit(1)
+          .textFieldStyle(.plain)
+          .font(.system(size: Popup.searchFontSize, weight: .regular))
+          .onSubmit {
+            appState.select(flags: .currentModifierFlags)
+          }
+      }
 
       if !query.isEmpty {
         Button {
@@ -45,6 +60,18 @@ struct SearchFieldView: View {
       }
     }
     .frame(height: Popup.searchFieldHeight)
+    .animation(.easeInOut(duration: 0.12), value: appState.scope)
+    // The dropdown hangs below the left of the row. An overlay keeps it inside
+    // the panel -- a popover would be its own window and would take key away
+    // from the search field, which has to keep answering the arrows.
+    .overlay(alignment: .topLeading) {
+      if appState.scopePickerOpen {
+        ScopePickerView()
+          .offset(y: Popup.searchFieldHeight + 4)
+          .transition(.opacity)
+      }
+    }
+    .animation(.easeOut(duration: 0.12), value: appState.scopePickerOpen)
   }
 
   /// Upstream's filled, bordered field, kept for pre-Tahoe.

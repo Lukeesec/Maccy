@@ -2,7 +2,7 @@ import Sauce
 import Defaults
 import SwiftUI
 
-struct KeyHandlingView<Content: View>: View {
+struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_body_length
   @Binding var searchQuery: String
   @FocusState.Binding var searchFocused: Bool
   @ViewBuilder let content: () -> Content
@@ -55,6 +55,10 @@ struct KeyHandlingView<Content: View>: View {
           }
         case .clearSearch:
           searchQuery = ""
+          // ⌃U empties the field, and the chip is part of the field.
+          if ForkStyle.isActive {
+            appState.clearScope()
+          }
           return .handled
         case .deleteCurrentItem:
           if appState.navigator.pasteStackSelected {
@@ -82,6 +86,12 @@ struct KeyHandlingView<Content: View>: View {
             return .ignored
           }
 
+          // While the preview has focus the arrows are caret keys. Moving the
+          // list selection out from under an open draft would discard it.
+          guard !PreviewEditor.shared.isFocused else {
+            return .ignored
+          }
+
           appState.navigator.highlightNext()
           return .handled
         case .moveToLast:
@@ -93,6 +103,12 @@ struct KeyHandlingView<Content: View>: View {
           return .handled
         case .moveToPrevious:
           guard NSApp.characterPickerWindow == nil else {
+            return .ignored
+          }
+
+          // While the preview has focus the arrows are caret keys. Moving the
+          // list selection out from under an open draft would discard it.
+          guard !PreviewEditor.shared.isFocused else {
             return .ignored
           }
 
@@ -152,13 +168,10 @@ struct KeyHandlingView<Content: View>: View {
           appState.actionsMenuOpen = true
           return .handled
         case .focusActions:
-          guard ForkStyle.isActive, ForkStyle.actions != .none else { return .ignored }
-          appState.actionsFocused = true
-          return .handled
-        case .focusActionsFromArrow:
-          // Let the caret move when there is text to move through.
-          guard ForkStyle.isActive, ForkStyle.actions != .none,
-                searchQuery.isEmpty, !appState.actionsFocused else {
+          // .rowTrailing was retired; only placements that actually draw a
+          // control may take focus.
+          guard ForkStyle.isActive,
+                ForkStyle.actions == .searchRow || ForkStyle.actions == .hintBar else {
             return .ignored
           }
           appState.actionsFocused = true
@@ -167,6 +180,64 @@ struct KeyHandlingView<Content: View>: View {
           guard appState.actionsFocused else { return .ignored }
           appState.actionsFocused = false
           appState.actionsMenuOpen = false
+          return .handled
+        case .openScopePicker:
+          // Only at the very start of an empty query. With text in the field a
+          // slash is a slash, so let the field have it.
+          guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen else {
+            return .ignored
+          }
+          appState.openScopePicker()
+          return .handled
+        case .moveScopeNext:
+          appState.moveScopePickerSelection(by: 1)
+          return .handled
+        case .moveScopePrevious:
+          appState.moveScopePickerSelection(by: -1)
+          return .handled
+        case .commitScope:
+          appState.commitScopePicker()
+          return .handled
+        case .closeScopePicker:
+          appState.closeScopePicker()
+          return .handled
+        case .clearScope:
+          appState.clearScope()
+          return .handled
+        case .arrowRight:
+          // Right arrow opens the editable preview and puts focus in it. The
+          // caret wins whenever there is a query to move through, and the
+          // preview keeps the key once it has focus.
+          guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen,
+                !PreviewEditor.shared.isFocused else {
+            return .ignored
+          }
+          guard let item = appState.navigator.leadHistoryItem else { return .ignored }
+
+          if !appState.preview.state.isOpen {
+            appState.preview.togglePreview()
+          }
+          PreviewEditor.shared.begin(item: item)
+          PreviewEditor.shared.isFocused = true
+          return .handled
+        case .arrowLeft:
+          // Left arrow walks back out of whatever the right arrow walked into,
+          // and only opens the scope picker once there is nothing left to leave.
+          // The draft is deliberately left alone: leaving the preview is not
+          // discarding the edit.
+          if PreviewEditor.shared.isFocused {
+            PreviewEditor.shared.isFocused = false
+            return .handled
+          }
+          if appState.actionsFocused {
+            appState.actionsFocused = false
+            appState.actionsMenuOpen = false
+            return .handled
+          }
+          guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen else {
+            return .ignored
+          }
+          appState.openScopePicker()
           return .handled
         case .copyCurrentItem:
           // Pass empty flags deliberately. .currentModifierFlags would still carry
@@ -177,6 +248,11 @@ struct KeyHandlingView<Content: View>: View {
           return .handled
         case .selectCurrentItem:
           appState.select(flags: .currentModifierFlags)
+          return .handled
+        case .close where PreviewEditor.shared.isFocused:
+          // Escape steps out of the preview first. A second one closes the
+          // popup, as it always has.
+          PreviewEditor.shared.isFocused = false
           return .handled
         case .close:
           appState.popup.close()

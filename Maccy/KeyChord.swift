@@ -39,8 +39,15 @@ enum KeyChord: CaseIterable {
   case pinOrUnpin
   case copyCurrentItem
   case focusActions
-  case focusActionsFromArrow
   case unfocusActions
+  case arrowLeft
+  case arrowRight
+  case openScopePicker
+  case closeScopePicker
+  case commitScope
+  case moveScopeNext
+  case moveScopePrevious
+  case clearScope
   case selectCurrentItem
   case close
   case togglePreview
@@ -71,8 +78,46 @@ enum KeyChord: CaseIterable {
     self.init(key, modifierFlags)
   }
 
+  /// Keys the scope dropdown takes over while it is showing.
+  ///
+  /// This is resolved before the main switch rather than as cases inside it. The
+  /// switch is ordered, several of its cases carry `where` clauses, and there is
+  /// a modifier catch-all near the bottom that silently swallows anything added
+  /// after it -- so a menu that has to win the arrows outright is clearer, and
+  /// safer, handled up front.
+  private static func scopePickerChord(
+    _ key: Key,
+    _ modifierFlags: NSEvent.ModifierFlags
+  ) -> KeyChord? {
+    switch (key, modifierFlags) {
+    case (.downArrow, []),
+         (.tab, []),
+         (.n, [.control]),
+         (.j, [.control]):
+      return .moveScopeNext
+    case (.upArrow, []),
+         (.tab, [.shift]),
+         (.p, [.control]),
+         (.k, [.control]):
+      return .moveScopePrevious
+    case (.return, _),
+         (.keypadEnter, _):
+      return .commitScope
+    case (.escape, _):
+      return .closeScopePicker
+    default:
+      return nil
+    }
+  }
+
   // swiftlint:disable:next cyclomatic_complexity function_body_length
   init(_ key: Key, _ modifierFlags: NSEvent.ModifierFlags) {
+    if AppState.shared.scopePickerOpen,
+       let chord = KeyChord.scopePickerChord(key, modifierFlags) {
+      self = chord
+      return
+    }
+
     switch (key, modifierFlags) {
     case (.delete, [.command, .option]):
       self = .clearHistory
@@ -80,6 +125,16 @@ enum KeyChord: CaseIterable {
       self = .clearHistoryAll
     case (.u, [.control]):
       self = .clearSearch
+    // Backspace on an empty query deletes the scope chip, the way a token in a
+    // Mail or Finder search field is deleted. Guarded on there being a chip to
+    // delete, so an ordinary Backspace still reaches the text field untouched.
+    // Ahead of the delete-item shortcut, which defaults to ⌥⌫ and so does not
+    // collide; a user who rebinds it to a bare Backspace loses it only while a
+    // chip is showing and the query is empty.
+    case (.delete, []) where ForkStyle.isActive
+      && AppState.shared.scope != .all
+      && AppState.shared.history.searchQuery.isEmpty:
+      self = .clearScope
     case (KeyChord.deleteKey, KeyChord.deleteModifiers):
       self = .deleteCurrentItem
     case (.h, [.control]):
@@ -129,16 +184,25 @@ enum KeyChord: CaseIterable {
     case (.c, [.control]),
          (.c, [.option]):
       self = .copyCurrentItem
-    // Tab is how macOS moves focus between controls. Right arrow is offered too,
-    // but only reaches the actions control when there is no query to move a caret
-    // through -- the handler makes that call.
+    // Tab is how macOS moves focus between controls, and is all that is left of
+    // the actions affordance now that it defaults to no placement at all.
     case (.tab, []):
       self = .focusActions
-    case (.rightArrow, []):
-      self = .focusActionsFromArrow
-    case (.tab, [.shift]),
-         (.leftArrow, []):
+    case (.tab, [.shift]):
       self = .unfocusActions
+    // The arrows are ambiguous by themselves: they belong to the caret whenever
+    // there is a query to move through, and only mean "open the preview" or
+    // "open the scope picker" on an empty one. Classify them plainly here and
+    // let the handler, which can see the query, decide.
+    case (.rightArrow, []):
+      self = .arrowRight
+    case (.leftArrow, []):
+      self = .arrowLeft
+    // Typing "/" at the start of an empty query opens the scope picker, the way
+    // Spotlight narrows with a token. Anywhere else it is just a slash, which is
+    // again the handler's call.
+    case (.slash, []):
+      self = .openScopePicker
     case (.return, _),
          (.keypadEnter, _):
       self = .selectCurrentItem

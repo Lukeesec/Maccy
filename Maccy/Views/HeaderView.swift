@@ -62,5 +62,9 @@ struct HeaderView: View {
     .background(.clear)
     .frame(maxHeight: !appState.searchVisible ? 0 : nil, alignment: .top)
     .readHeight(appState, into: \.popup.headerHeight)
+    // The scope dropdown is an overlay on the search row, so it hangs down over
+    // the list. Without this the list, being the later sibling in the enclosing
+    // stack, draws straight over the top of it.
+    .zIndex(1)
   }
 }

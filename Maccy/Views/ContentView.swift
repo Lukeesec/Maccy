@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -10,6 +11,27 @@ struct ContentView: View {
   @State private var presented: Bool = false
 
   @FocusState private var searchFocused: Bool
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotionEnvironment
+
+  /// The environment value is the one SwiftUI keeps up to date, but this view is
+  /// hosted in an NSPanel rather than a scene, so read the workspace flag as well
+  /// and take either.
+  private var reduceMotion: Bool {
+    reduceMotionEnvironment || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+  }
+
+  /// Direct manipulation has to read as instant: the whole open loop has well
+  /// under 100ms of budget, and a spring that overshoots spends it announcing
+  /// itself. Critically damped, so the panel arrives and stops. Bounce belongs to
+  /// gesture-driven motion, not to chrome that appears on a keystroke.
+  ///
+  /// Under Reduce Motion there is no scale at all, just a short cross-fade.
+  private var entranceAnimation: Animation {
+    reduceMotion
+      ? .easeOut(duration: 0.1)
+      : .spring(response: 0.20, dampingFraction: 1.0)
+  }
 
   var body: some View {
     ZStack {
@@ -59,18 +81,23 @@ struct ContentView: View {
         try? await appState.history.load()
       }
     }
-    .scaleEffect(ForkStyle.isActive ? (presented ? 1 : 0.965) : 1, anchor: .center)
+    .scaleEffect(
+      ForkStyle.isActive && !reduceMotion ? (presented ? 1 : 0.965) : 1,
+      anchor: .center
+    )
     .opacity(ForkStyle.isActive ? (presented ? 1 : 0) : 1)
     .animation(.easeInOut(duration: 0.2), value: appState.searchVisible)
     .onChange(of: scenePhase) {
       if scenePhase == .active {
-        withAnimation(.spring(response: 0.24, dampingFraction: 0.85)) {
+        withAnimation(entranceAnimation) {
           presented = true
         }
       } else {
         presented = false
         appState.actionsFocused = false
         appState.actionsMenuOpen = false
+        // The popup is gone; a scratch edit does not outlive it.
+        PreviewEditor.shared.begin(item: nil)
       }
     }
     .environment(appState)
