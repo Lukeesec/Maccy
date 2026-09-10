@@ -1,4 +1,5 @@
 import AppKit.NSEvent
+import Carbon.HIToolbox
 import KeyboardShortcuts
 import Sauce
 
@@ -118,11 +119,11 @@ enum KeyChord: CaseIterable {
   static func isEscape(_ event: NSEvent?) -> Bool {
     guard let event, event.type == .keyDown else { return false }
 
-    let keyCode = Int(event.keyCode)
     // Both, because this is the one key that has to work when everything else
-    // has gone wrong: the raw code in case the layout table is unhelpful, and
-    // the table in case the raw code is ever something other than 53.
-    return keyCode == Key.escape.rawValue || Sauce.shared.key(for: keyCode) == .escape
+    // has gone wrong: the hardware code, and the layout table as a backstop.
+    // (Sauce's Key is String-backed, so its rawValue is not a key code.)
+    let keyCode = Int(event.keyCode)
+    return keyCode == kVK_Escape || Sauce.shared.key(for: keyCode) == .escape
   }
 
   // swiftlint:disable:next cyclomatic_complexity function_body_length
