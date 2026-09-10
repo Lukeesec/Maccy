@@ -145,7 +145,8 @@ rather than removed:
 
 > Maccy Settings → Appearance → uncheck **Show title**
 
-Or: `defaults write org.p0deje.Maccy showTitle -bool false` and relaunch.
+(The title is suppressed outright by the redesign on macOS 26, so this only
+matters on older systems.)
 
 ## Reverting to stock
 
@@ -160,6 +161,32 @@ lives in `~/Library/Application Support/Maccy` and will not appear.
 
 Delete any leftover `/Applications/Maccy.app.backup-*` and
 `~/Library/Application Support/Maccy.superseded-*` once you are happy.
+
+## Trying the design variants
+
+The contentious parts of the redesign are switchable at runtime so they can be
+compared on a real machine and the losers deleted. Use the script — see the
+warning below:
+
+```sh
+script/set-style.sh                          # show current values
+script/set-style.sh rowStyle oneLine         # twoLine | oneLine | compact
+script/set-style.sh chrome stripped          # stripped | hintBar | menu
+script/set-style.sh selectionStyle neutralPill  # pill | neutralPill | bar
+script/set-style.sh grouping none            # byTime | none
+script/set-style.sh showIcons false          # true | false
+```
+
+Defaults are `twoLine` / `hintBar` / `pill` / `byTime`, icons on.
+
+> **`defaults write org.p0deje.Maccy <key>` does not work on these builds.**
+> macOS still has a sandbox container registered for the bundle identifier and
+> redirects domain writes into
+> `~/Library/Containers/org.p0deje.Maccy/Data/Library/Preferences`, while the
+> unsandboxed fork reads `~/Library/Preferences/org.p0deje.Maccy.plist`. The
+> write appears to succeed and `defaults read` even reflects it, but the app
+> never sees the change. `script/set-style.sh` writes to the real path and
+> restarts the app.
 
 ## Tuning the look
 

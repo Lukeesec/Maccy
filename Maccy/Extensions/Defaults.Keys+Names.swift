@@ -80,7 +80,9 @@ extension Defaults.Keys {
   static let suppressClearAlert = Key<Bool>("suppressClearAlert", default: false, suite: preferencesSuite)
   static let windowSize = Key<NSSize>("windowSize", default: NSSize(width: 450, height: 800), suite: preferencesSuite)
   static let windowPosition = Key<NSPoint>("windowPosition", default: NSPoint(x: 0.5, y: 0.8), suite: preferencesSuite)
-  static let showApplicationIcons = Key<Bool>("showApplicationIcons", default: false, suite: preferencesSuite)
+  // Defaulted on for the fork: a row without a source icon does not read as a
+  // system result row. An explicit user setting still wins.
+  static let showApplicationIcons = Key<Bool>("showApplicationIcons", default: true, suite: preferencesSuite)
   static let showHexColorSwatch = Key<Bool>("showHexColorSwatch", default: true, suite: preferencesSuite)
   static let previewWidth = Key<CGFloat>("previewWidth", default: 400, suite: preferencesSuite)
 }

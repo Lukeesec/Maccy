@@ -4,14 +4,22 @@ import Foundation
 // Runtime-switchable presentation variants for the Spotlight redesign.
 //
 // These exist so the contentious parts of the redesign can be compared on a real
-// machine without a rebuild, and the losers deleted afterwards. Flip one with:
+// machine without a rebuild, and the losers deleted afterwards. Flip one with
+// script/set-style.sh, for example:
 //
-//   defaults write org.p0deje.Maccy forkRowStyle twoLine
-//   defaults write org.p0deje.Maccy forkChrome hintBar
-//   defaults write org.p0deje.Maccy forkSelectionStyle pill
+//   script/set-style.sh rowStyle oneLine
+//   script/set-style.sh chrome stripped
+//   script/set-style.sh selectionStyle neutralPill
 //
-// then reopen the popup. Every variant is gated to macOS 26; older systems keep
-// upstream's layout, which is tuned for NSVisualEffectView.
+// `defaults write org.p0deje.Maccy <key>` does NOT work here. macOS still has a
+// sandbox container registered for the bundle identifier and redirects domain
+// writes into it, while the unsandboxed fork reads
+// ~/Library/Preferences/org.p0deje.Maccy.plist. The write appears to succeed and
+// `defaults read` even reflects it, but the app never sees it. The script writes
+// to that path directly.
+//
+// Every variant is gated to macOS 26; older systems keep upstream's layout,
+// which is tuned for NSVisualEffectView.
 
 /// How much vertical structure each history row carries.
 enum ForkRowStyle: String, CaseIterable, Identifiable, Defaults.Serializable {
