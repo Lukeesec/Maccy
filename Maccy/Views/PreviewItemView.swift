@@ -108,6 +108,8 @@ struct PreviewItemView: View {
       }
     }
     .controlSize(.small)
+    .foregroundStyle(ForkStyle.isActive ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+    .padding(ForkStyle.isActive ? 14 : 0)
   }
 }
 

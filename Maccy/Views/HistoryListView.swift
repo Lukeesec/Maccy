@@ -159,6 +159,7 @@ struct HistoryListView: View {
       .contentMargins(.top, scrollTopPadding, for: .scrollIndicators)
       .contentMargins(.bottom, scrollBottomPadding, for: .scrollIndicators)
     }
+    .scrollIndicators(ForkStyle.isActive ? .never : .automatic)
     .accessibilityIdentifier("history-scroll-view")
 
     VStack(spacing: 0) {

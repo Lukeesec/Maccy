@@ -47,7 +47,7 @@ class AppState: Sendable {
       onSlideoutResize: { previewWidth in
         Defaults[.previewWidth] = previewWidth
       })
-    preview.contentWidth = Defaults[.windowSize].width
+    preview.contentWidth = ForkStyle.isActive ? Popup.panelWidth : Defaults[.windowSize].width
     preview.slideoutWidth = Defaults[.previewWidth]
   }
 
