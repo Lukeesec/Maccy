@@ -9,6 +9,42 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
 
   @Environment(AppState.self) private var appState
 
+  /// Put the caret back in the search field.
+  ///
+  /// The preview is an `NSTextView`, which takes first responder behind SwiftUI's
+  /// back, so `searchFocused` can still read true while the field plainly does
+  /// not have the key -- and assigning true to a binding that already holds true
+  /// moves nothing at all. Drop it and re-assert it a runloop turn later, so the
+  /// focus actually travels whatever state it was left in.
+  @MainActor
+  private func refocusSearch() {
+    let field = $searchFocused
+    searchFocused = false
+    DispatchQueue.main.async {
+      field.wrappedValue = true
+    }
+  }
+
+  /// True when the preview genuinely owns the keyboard.
+  ///
+  /// `PreviewEditor.isFocused` is set in one place and cleared in several, and if
+  /// it is ever left true with no editable pane on screen then Up and Down go
+  /// dead with nothing on screen to explain why. Treat focus as real only while
+  /// the pane is open on an item it will actually render as a field, and repair
+  /// the flag when it is not.
+  @MainActor
+  private func previewHoldsKeys() -> Bool {
+    guard PreviewEditor.shared.isFocused else { return false }
+
+    guard appState.preview.state.isOpen,
+          PreviewEditor.isEditable(appState.navigator.leadHistoryItem) else {
+      PreviewEditor.shared.isFocused = false
+      return false
+    }
+
+    return true
+  }
+
   var body: some View {
     content()
       .onKeyPress { _ in
@@ -16,6 +52,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
         // key code and don't properly work with multiple inputs,
         // so pressing ⌘, on non-English layout doesn't open
         // preferences. Stick to NSEvent to fix this behavior.
+        let event = NSApp.currentEvent
 
         if searchFocused {
           // Ignore input when candidate window is open
@@ -26,7 +63,23 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           }
         }
 
-        switch KeyChord(NSApp.currentEvent) {
+        // Escape gets out of the preview, unconditionally.
+        //
+        // Deliberately ahead of KeyChord and of every guard below. KeyChord
+        // reclassifies Escape as the scope picker's Escape whenever the picker
+        // thinks it is open, and the bug this fixes is precisely that some other
+        // piece of state disagrees about who owns the key -- so nothing here may
+        // depend on that state being consistent. Read the raw key code, drop the
+        // focus, take the picker down with it, hand the field back. A second
+        // Escape then closes the popup, as it always has.
+        if KeyChord.isEscape(event), PreviewEditor.shared.isFocused {
+          PreviewEditor.shared.isFocused = false
+          appState.closeScopePicker()
+          refocusSearch()
+          return .handled
+        }
+
+        switch KeyChord(event) {
         case .clearHistory:
           if let item = appState.footer.items.first(where: { $0.title == "clear" }),
              item.confirmation != nil,
@@ -87,8 +140,10 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           }
 
           // While the preview has focus the arrows are caret keys. Moving the
-          // list selection out from under an open draft would discard it.
-          guard !PreviewEditor.shared.isFocused else {
+          // list selection out from under an open draft would discard it. Only
+          // while it really has focus, though: a stale flag must not be allowed
+          // to disable list navigation.
+          guard !previewHoldsKeys() else {
             return .ignored
           }
 
@@ -106,9 +161,8 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
             return .ignored
           }
 
-          // While the preview has focus the arrows are caret keys. Moving the
-          // list selection out from under an open draft would discard it.
-          guard !PreviewEditor.shared.isFocused else {
+          // See .moveToNext.
+          guard !previewHoldsKeys() else {
             return .ignored
           }
 
@@ -181,14 +235,10 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           appState.actionsFocused = false
           appState.actionsMenuOpen = false
           return .handled
-        case .openScopePicker:
-          // Only at the very start of an empty query. With text in the field a
-          // slash is a slash, so let the field have it.
-          guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen else {
-            return .ignored
-          }
-          appState.openScopePicker()
-          return .handled
+        // "/" is not handled here at all. It has to reach the field, so that the
+        // text is what drives the picker: see AppState.syncScopePicker, which
+        // opens it on a leading slash, narrows it as more is typed, and lets go
+        // again the moment the text names no row.
         case .moveScopeNext:
           appState.moveScopePickerSelection(by: 1)
           return .handled
@@ -199,7 +249,10 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           appState.commitScopePicker()
           return .handled
         case .closeScopePicker:
-          appState.closeScopePicker()
+          // Escape takes the picker down and leaves whatever was typed exactly
+          // where it is -- including a "/..." that would otherwise reopen it on
+          // the very next keystroke.
+          appState.dismissScopePicker()
           return .handled
         case .clearScope:
           appState.clearScope()
@@ -232,7 +285,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           // discarding the edit.
           if PreviewEditor.shared.isFocused {
             PreviewEditor.shared.isFocused = false
-            searchFocused = true
+            refocusSearch()
             return .handled
           }
           if appState.actionsFocused {
@@ -255,12 +308,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
         case .selectCurrentItem:
           appState.select(flags: .currentModifierFlags)
           return .handled
-        case .close where PreviewEditor.shared.isFocused:
-          // Escape steps out of the preview first. A second one closes the
-          // popup, as it always has.
-          PreviewEditor.shared.isFocused = false
-          searchFocused = true
-          return .handled
+        // Escape out of the preview is handled above, before KeyChord runs.
         case .close:
           appState.popup.close()
           return .handled

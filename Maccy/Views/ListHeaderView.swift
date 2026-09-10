@@ -33,16 +33,17 @@ struct ListHeaderView: View {
           }
           if scenePhase == .background {
             // The panel is reused between showings, so a picker left open would
-            // still be down the next time it appears.
-            appState.closeScopePicker()
+            // still be down the next time it appears -- and an Escape dismissal
+            // does not outlive the popup either.
+            appState.resetScopePicker()
           }
         }
-        // Typing is how the picker is dismissed by carrying on: the first
-        // character lands in the field and the menu gets out of the way.
+        // The field drives the picker. A leading "/" is a command: it opens the
+        // picker and narrows it as more is typed. Anything else is an ordinary
+        // search term, and typing one is how a picker opened from the chevron or
+        // Left arrow is dismissed by simply carrying on.
         .onChange(of: searchQuery) {
-          if !searchQuery.isEmpty && appState.scopePickerOpen {
-            appState.closeScopePicker()
-          }
+          appState.syncScopePicker(with: searchQuery)
         }
         // Only reliable way to disable the cursor. allowsHitTesting() does not work
         .offset(y: appState.searchVisible ? 0 : -Popup.searchFieldHeight)

@@ -20,6 +20,11 @@ struct SearchFieldView: View {
   /// The scope lives in the row rather than beside it: a chevron at the far left
   /// that opens the picker, and, once a scope is committed, a chip in front of
   /// the query text that the caret types after and Backspace deletes.
+  ///
+  /// The picker itself is not drawn here. It used to hang off this row as a
+  /// `.topLeading` overlay, which put it straight over the results; it is now
+  /// docked in the header below the row, where it has space of its own. See
+  /// `HeaderView` and `ScopePickerView`.
   private var heroField: some View {
     HStack(spacing: Popup.searchIconSpacing) {
       HStack(spacing: 6) {
@@ -61,17 +66,6 @@ struct SearchFieldView: View {
     }
     .frame(height: Popup.searchFieldHeight)
     .animation(.easeInOut(duration: 0.12), value: appState.scope)
-    // The dropdown hangs below the left of the row. An overlay keeps it inside
-    // the panel -- a popover would be its own window and would take key away
-    // from the search field, which has to keep answering the arrows.
-    .overlay(alignment: .topLeading) {
-      if appState.scopePickerOpen {
-        ScopePickerView()
-          .offset(y: Popup.searchFieldHeight + 4)
-          .transition(.opacity)
-      }
-    }
-    .animation(.easeOut(duration: 0.12), value: appState.scopePickerOpen)
   }
 
   /// Upstream's filled, bordered field, kept for pre-Tahoe.

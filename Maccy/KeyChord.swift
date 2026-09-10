@@ -42,7 +42,6 @@ enum KeyChord: CaseIterable {
   case unfocusActions
   case arrowLeft
   case arrowRight
-  case openScopePicker
   case closeScopePicker
   case commitScope
   case moveScopeNext
@@ -108,6 +107,22 @@ enum KeyChord: CaseIterable {
     default:
       return nil
     }
+  }
+
+  /// True when the event is the physical Escape key.
+  ///
+  /// Read straight off the key code rather than through `KeyChord`, which
+  /// classifies Escape differently depending on what else is open and is
+  /// therefore exactly the wrong thing to ask when the question is "how do I get
+  /// out of here". 53 is Escape on every layout.
+  static func isEscape(_ event: NSEvent?) -> Bool {
+    guard let event, event.type == .keyDown else { return false }
+
+    let keyCode = Int(event.keyCode)
+    // Both, because this is the one key that has to work when everything else
+    // has gone wrong: the raw code in case the layout table is unhelpful, and
+    // the table in case the raw code is ever something other than 53.
+    return keyCode == Key.escape.rawValue || Sauce.shared.key(for: keyCode) == .escape
   }
 
   // swiftlint:disable:next cyclomatic_complexity function_body_length
@@ -198,11 +213,11 @@ enum KeyChord: CaseIterable {
       self = .arrowRight
     case (.leftArrow, []):
       self = .arrowLeft
-    // Typing "/" at the start of an empty query opens the scope picker, the way
-    // Spotlight narrows with a token. Anywhere else it is just a slash, which is
-    // again the handler's call.
-    case (.slash, []):
-      self = .openScopePicker
+    // "/" is deliberately *not* classified here. It is a real character that has
+    // to land in the field: the scope picker is opened by the text, not by the
+    // keystroke, so that typing carries on narrowing it and so that a slash the
+    // picker cannot name stays an ordinary search term. See
+    // AppState.syncScopePicker.
     case (.return, _),
          (.keypadEnter, _):
       self = .selectCurrentItem

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 // -----------------------------------------------------------------------------
@@ -8,16 +9,23 @@ import SwiftUI
 // stays visible in the field as a chip once committed. This is that pattern:
 //
 //   * a dim chevron at the left of the search row teaches the gesture,
-//   * Left arrow on an empty query -- or typing "/" -- opens the picker,
-//   * Return commits the highlighted scope, which then renders as a chip in
-//     front of the query text,
+//   * Left arrow on an empty query opens the picker,
+//   * typing "/" opens it too, and keeps typing narrowing it: the "/" and
+//     everything after it stay in the field, so a slash is still typable and
+//     still searchable,
+//   * Return commits the highlighted scope, which replaces the "/..." text with
+//     a chip in front of the query,
 //   * Backspace on an empty query removes the chip again.
+//
+// The picker is *docked* under the search row rather than floating over the
+// list: it is part of the header's layout, so the results move down instead of
+// being covered. See ScopePickerView.reservedHeight.
 //
 // Everything here is macOS 26 only. On 14/15 the chevron is never drawn and the
 // key handlers all return .ignored, so the field behaves exactly as upstream's.
 // -----------------------------------------------------------------------------
 
-/// One row of the scope dropdown.
+/// One row of the scope picker.
 ///
 /// The scopes come first, then a divider and the escape hatch into Settings.
 /// That row is not decoration: with the per-row actions button gone, the picker
@@ -55,6 +63,46 @@ enum ScopePickerRow: Hashable, Identifiable {
     case .scope(let scope): return scopeTitleKey(scope)
     case .settings: return "scope_settings"
     }
+  }
+
+  /// What the typed command is matched against: the bare token, and the name the
+  /// row actually shows. Both, because "/li" and "/lin" name Links by its token
+  /// while "/set" and "/sett" name Settings by either -- and a user typing at a
+  /// list of words expects the words to match.
+  ///
+  /// The token comes off `ForkScope` rather than being restated here; only the
+  /// settings row, which is not a scope, carries its own.
+  private var needles: [String] {
+    switch self {
+    case .scope(let scope): return [scope.token, scope.title]
+    case .settings: return ["set", NSLocalizedString("scope_settings", comment: "")]
+    }
+  }
+
+  /// True when what has been typed after the "/" is a prefix of this row.
+  ///
+  /// Prefix rather than substring: a command palette that jumps to "Images" the
+  /// moment you type "g" is not predictable, and every token here is short
+  /// enough that a prefix is all the typing anyone should have to do.
+  func matches(_ needle: String) -> Bool {
+    guard !needle.isEmpty else { return true }
+
+    return needles.contains { candidate in
+      candidate.range(
+        of: needle,
+        options: [.caseInsensitive, .diacriticInsensitive, .anchored]
+      ) != nil
+    }
+  }
+
+  /// The rows a typed command leaves showing. Empty means the text names
+  /// nothing, which is the caller's cue to close the picker and let the slash be
+  /// an ordinary search term.
+  static func rows(matching needle: String) -> [ScopePickerRow] {
+    let trimmed = needle.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return ordered }
+
+    return ordered.filter { $0.matches(trimmed) }
   }
 }
 
@@ -133,33 +181,73 @@ struct ScopeChipView: View {
   }
 }
 
-/// The dropdown itself, anchored below the left edge of the search row.
+/// The picker itself, docked in its own gutter under the left of the search row.
+///
+/// It used to be a `.topLeading` overlay on the search row, which drew it *over*
+/// the results -- the panel is a fixed-width NSPanel and cannot put a flyout
+/// outside its own bounds, so "beside the list" was never available. Docking it
+/// into the header's layout instead gives it real space: the list moves down by
+/// exactly this much and stays entirely visible, and `Popup.scopePickerHeight`
+/// asks the panel for the extra height so a short panel grows rather than
+/// squeezing the results out.
 struct ScopePickerView: View {
   @Environment(AppState.self) private var appState
 
-  private static let width: CGFloat = 240
+  private static let width: CGFloat = 260
   /// Fixed leading column, so the tokens line up as a column of their own.
   private static let tokenWidth: CGFloat = 52
   private static let rowHeight: CGFloat = 26
+  private static let rowSpacing: CGFloat = 1
+  /// A `Divider` plus the padding it carries above and below.
+  private static let dividerHeight: CGFloat = 9
+  private static let containerPadding: CGFloat = 6
   private static let cornerRadius: CGFloat = 12
 
+  /// Gap between the search row and the docked picker.
+  static let topGap: CGFloat = 6
+
+  private static func panelHeight(rowCount: Int, hasSettings: Bool) -> CGFloat {
+    guard rowCount > 0 else { return 0 }
+
+    // The divider is an element of the stack like any row, so it brings a gap of
+    // its own with it.
+    let hasDivider = hasSettings && rowCount > 1
+    let gaps = CGFloat(rowCount - 1 + (hasDivider ? 1 : 0)) * rowSpacing
+    return CGFloat(rowCount) * rowHeight
+      + gaps
+      + (hasDivider ? dividerHeight : 0)
+      + containerPadding * 2
+  }
+
+  /// Vertical space the docked picker claims in the header while it is open,
+  /// gap included.
+  ///
+  /// Deliberately the height of the *whole* list rather than of the filtered
+  /// rows: narrowing "/l" to a single row must not resize the panel under the
+  /// typing. The picker shrinks, the gutter does not, and the extra room simply
+  /// goes back to the results.
+  static let reservedHeight: CGFloat = topGap
+    + panelHeight(rowCount: ScopePickerRow.ordered.count, hasSettings: true)
+
+  private var rows: [ScopePickerRow] { appState.scopePickerRows }
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 1) {
-      ForEach(ScopePickerRow.ordered) { row in
-        if row == .settings {
+    VStack(alignment: .leading, spacing: Self.rowSpacing) {
+      ForEach(rows) { row in
+        if row == .settings && rows.count > 1 {
           Divider()
             .padding(.vertical, 4)
         }
         rowView(row)
       }
     }
-    .padding(6)
+    .padding(Self.containerPadding)
     .frame(width: Self.width, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         .fill(Color(nsColor: .windowBackgroundColor))
-        // A dropdown over glass needs to read as its own surface, so it sits a
-        // little lighter than the panel rather than disappearing into it.
+        // Docked or not, the picker needs to read as its own surface, so it sits
+        // a little lighter than the panel rather than disappearing into it.
         .overlay(
           RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
             .fill(Color.primary.opacity(0.06))
@@ -169,8 +257,12 @@ struct ScopePickerView: View {
       RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
     )
-    .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
+    // Lighter than the dropdown's shadow was: this one sits in the panel's own
+    // layout rather than floating above the list, and a heavy shadow would
+    // claim otherwise.
+    .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
     .fixedSize()
+    .accessibilityElement(children: .contain)
   }
 
   @ViewBuilder

@@ -164,7 +164,7 @@ Delete any leftover `/Applications/Maccy.app.backup-*` and
 | Key | Does |
 |---|---|
 | <kbd>←</kbd> | Opens the scope picker (empty query). Leaves the preview when it has focus. Moves the caret when there is a query. |
-| <kbd>/</kbd> | Opens the scope picker, on an empty query. |
+| <kbd>/</kbd> | Typed normally. On an empty query it also opens the picker as a command palette — `/li` narrows to Links, <kbd>↩</kbd> commits it as a chip. No match just searches for the text. |
 | <kbd>→</kbd> | Opens the editable preview and focuses it (empty query, text items only). |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Move through results, or through the scope picker when it is open. |
 | <kbd>↩</kbd> | Copy and close. In the preview, copies the edited draft. Commits the scope when the picker is open. |
@@ -172,7 +172,7 @@ Delete any leftover `/Applications/Maccy.app.backup-*` and
 | <kbd>⌥↩</kbd> | Paste instead of copy. |
 | <kbd>⌫</kbd> | Removes the scope chip when the query is empty. |
 | <kbd>⌃U</kbd> | Clears the query and the chip. |
-| <kbd>⎋</kbd> | Leaves the preview or the picker; a second one closes the popup. |
+| <kbd>⎋</kbd> | Leaves the preview or the picker, leaving typed text alone; a second one closes the popup. |
 | <kbd>⌘,</kbd> | Settings. |
 
 The preview edits a **scratch draft**: copying takes the draft, the stored item is

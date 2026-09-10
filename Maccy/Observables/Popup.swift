@@ -82,6 +82,14 @@ class Popup {
   var extraTopHeight: CGFloat = 0
   var extraBottomHeight: CGFloat = 0
   var footerHeight: CGFloat = 0
+  /// Vertical space the docked scope picker claims inside the header while it is
+  /// open.
+  ///
+  /// Kept separate from `headerHeight` on purpose. The header measures only its
+  /// search row, so the picker is never counted twice, and this number is the
+  /// picker's full height rather than its filtered height -- narrowing the
+  /// palette must not resize the panel underneath the typing.
+  var scopePickerHeight: CGFloat = 0
 
   var minimumHeight: CGFloat {
     // Reserve space for 3 items
@@ -141,7 +149,7 @@ class Popup {
     if AppState.shared.preview.state.isOpen && AppState.shared.navigator.leadSelection != nil {
       minHeight = max(minHeight, Self.minimumPreviewHeight)
     }
-    minHeight = max(headerHeight + Self.verticalPadding, minHeight)
+    minHeight = max(headerHeight + scopePickerHeight + Self.verticalPadding, minHeight)
 
     height = max(height, minHeight)
     height = min(height, Self.maxPanelHeight)
@@ -149,7 +157,8 @@ class Popup {
   }
 
   private func suitableHeight(for historyListHeight: CGFloat) -> CGFloat {
-    return historyListHeight + headerHeight + extraTopHeight + extraBottomHeight + footerHeight
+    return historyListHeight + headerHeight + scopePickerHeight
+      + extraTopHeight + extraBottomHeight + footerHeight
   }
 
   func resize(height: CGFloat) {
