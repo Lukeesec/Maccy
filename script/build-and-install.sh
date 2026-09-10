@@ -53,11 +53,13 @@ xcodebuild \
   DEVELOPMENT_TEAM="" \
   PROVISIONING_PROFILE_SPECIFIER="" \
   ENABLE_HARDENED_RUNTIME=NO \
-  CODE_SIGN_ENTITLEMENTS=Maccy/Maccy-adhoc.entitlements \
   build
 
 APP_BUILT="$DERIVED/Build/Products/Release/Maccy.app"
 [[ -d "$APP_BUILT" ]] || die "build reported success but $APP_BUILT is missing"
+
+step "Re-signing ad-hoc with fork entitlements"
+"$REPO_ROOT/script/resign-adhoc.sh" "$APP_BUILT" "$REPO_ROOT/Maccy/Maccy-adhoc.entitlements"
 
 # Hardened runtime turns on library validation, which requires every embedded
 # library to share the app's Team ID. An ad-hoc signature has none, so

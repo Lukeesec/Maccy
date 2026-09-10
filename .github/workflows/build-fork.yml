@@ -42,8 +42,13 @@ jobs:
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             ENABLE_HARDENED_RUNTIME=NO \
-            CODE_SIGN_ENTITLEMENTS=Maccy/Maccy-adhoc.entitlements \
             build
+
+      - name: Re-sign ad-hoc with fork entitlements
+        run: |
+          script/resign-adhoc.sh \
+            build/Build/Products/Release/Maccy.app \
+            Maccy/Maccy-adhoc.entitlements
 
       - name: Verify and package
         run: |
