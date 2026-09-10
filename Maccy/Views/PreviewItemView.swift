@@ -336,6 +336,10 @@ struct EditablePreviewTextView: NSViewRepresentable {
         guard let textView, let window = textView.window else { return }
         guard window.firstResponder !== textView else { return }
         window.makeFirstResponder(textView)
+        // NSTextView selects its whole contents when it takes first responder, so
+        // the first keystroke would replace the draft rather than extend it.
+        // Entering the field to edit means a caret at the end.
+        textView.setSelectedRange(NSRange(location: textView.string.count, length: 0))
       }
     }
   }
