@@ -36,20 +36,46 @@ The version is reported as `2.7.1-spotlight` (build `9062`). The high build numb
 is intentional: it keeps Sparkle from ever deciding that an upstream release is
 newer than your fork and quietly replacing it.
 
-## Requirements
+## Building it
 
-**Full Xcode 26.** Command Line Tools alone cannot build Maccy — it needs `actool`
-for `Assets.xcassets` and `momc` for `Storage.xcdatamodeld`, and neither ships with
-CLT.
+Maccy is a native Swift app, so there is no way around compiling it. Command Line
+Tools alone are not enough: `Assets.xcassets` needs `actool`, and the `@Model` and
+`#Preview` expansions need Xcode's macro plugins. Neither ships with CLT.
+
+There are two ways to get a build, and the first does not touch your machine.
+
+### Option A — build on GitHub, install locally (no Xcode)
+
+The `Build fork` workflow compiles the app on a GitHub-hosted macOS 26 runner,
+which has Xcode preinstalled, and uploads the finished `.app` as an artifact.
 
 ```sh
-mas install 497799835          # or: brew install xcodesorg/made/xcodes && xcodes install --latest
-sudo xcode-select -s /Applications/Xcode.app
-sudo xcodebuild -license accept
+gh workflow run build-fork.yml --repo Lukeesec/Maccy   # or just push to spotlight-ui
+gh run watch --repo Lukeesec/Maccy
+
+# then, from a clone of this repo:
+script/install-artifact.sh
 ```
 
-If `mas install` says "not purchased", open Xcode's App Store page once in the GUI
-first — that needs your Apple ID interactively.
+`script/install-artifact.sh` downloads the newest successful build, clears the
+quarantine flag that any internet download carries, verifies the signature, and
+installs it. It needs only Command Line Tools.
+
+### Option B — build locally
+
+Requires **full Xcode 26**, roughly 20GB installed.
+
+```sh
+brew install xcodesorg/made/xcodes && xcodes install --latest
+sudo xcode-select -s /Applications/Xcode.app
+sudo xcodebuild -license accept
+
+script/build-and-install.sh
+```
+
+`mas install 497799835` also works, but only if Xcode is already associated with
+your Apple ID — `mas` cannot perform the initial "Get". If it reports that you do
+not own the app, use `xcodes` or the App Store GUI.
 
 ## If you are running stock Maccy, here is the upgrade
 
@@ -61,11 +87,11 @@ this build reads the same container (`~/Library/Containers/org.p0deje.Maccy`).
 #    This removes the app bundle only. History and settings are untouched.
 brew uninstall --cask maccy
 
-# 2. Build and install.
+# 2. Get a build and install it, by either option above.
 git clone https://github.com/Lukeesec/Maccy.git
 cd Maccy
 git checkout spotlight-ui
-script/build-and-install.sh
+script/install-artifact.sh      # no Xcode needed
 ```
 
 **One-time step afterwards.** This build is ad-hoc signed, so macOS treats it as a
@@ -75,8 +101,8 @@ over. Pasting will not work until you fix that:
 > System Settings → Privacy & Security → Accessibility
 > Remove the old **Maccy** entry, then add `/Applications/Maccy.app`
 
-The script backs the previous app up to `/Applications/Maccy.app.backup-<timestamp>`
-before replacing it.
+Either script backs the previous app up to
+`/Applications/Maccy.app.backup-<timestamp>` before replacing it.
 
 ### Optional: finish the Spotlight look
 
@@ -108,14 +134,16 @@ Every metric lives in one place: `Maccy/Observables/Popup.swift`.
 | `searchFieldHeight`, `searchFontSize`, `searchIconSize` | Search row. |
 | `cornerRadius` | Item curvature. The panel derives from it via `windowCornerRadius`, so they stay concentric. |
 
-Edit, then `script/build-and-install.sh` again.
+Edit, push, and re-run the workflow — or `script/build-and-install.sh` if you have
+Xcode locally.
 
 ## Keeping up with upstream
 
 ```sh
 git fetch upstream
 git rebase upstream/master
-script/build-and-install.sh
+git push --force-with-lease origin spotlight-ui   # rebuilds via CI
+script/install-artifact.sh
 ```
 
 The changes are small and confined to seven files, so conflicts should be rare. If
@@ -123,8 +151,9 @@ upstream retires `Popup.cornerRadius` or reworks `KeyChord`, expect to resolve t
 
 ## Caveats
 
-- **Ad-hoc signed, not notarized.** Fine for a locally built app you run yourself.
-  It is not something to distribute.
+- **Ad-hoc signed, not notarized.** Fine for an app you build and run yourself. It
+  is not something to distribute. A CI build additionally arrives quarantined;
+  `script/install-artifact.sh` clears that flag for you.
 - **Do not use "Check for Updates…"** It still points at upstream's appcast. The
   version bump means it should report you are up to date, but rebuilding from source
   is the real update path.
