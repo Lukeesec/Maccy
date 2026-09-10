@@ -125,7 +125,8 @@ struct PreviewItemView: View {
 
       EditablePreviewTextView(
         text: Binding(get: { editor.draft }, set: { editor.draft = $0 }),
-        isFocused: Binding(get: { editor.isFocused }, set: { editor.isFocused = $0 })
+        isFocused: Binding(get: { editor.isFocused }, set: { editor.isFocused = $0 }),
+        focused: editor.isFocused
       )
       .frame(maxWidth: .infinity, minHeight: 44)
       .padding(6)
@@ -250,6 +251,15 @@ struct PreviewItemView: View {
 struct EditablePreviewTextView: NSViewRepresentable {
   @Binding var text: String
   @Binding var isFocused: Bool
+  /// The same value as `isFocused`, passed as a plain read.
+  ///
+  /// Constructing `Binding(get:set:)` never calls the getter during body
+  /// evaluation, so @Observable registers no dependency on `isFocused` and the
+  /// parent is never invalidated when it changes -- which meant `updateNSView`
+  /// never ran and focus was never applied. Reading the value at the call site
+  /// is what establishes the dependency; `updateNSView` then uses this rather
+  /// than the binding.
+  let focused: Bool
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: $text, isFocused: $isFocused)
@@ -276,7 +286,7 @@ struct EditablePreviewTextView: NSViewRepresentable {
       textView.string = text
     }
 
-    context.coordinator.syncFirstResponder(to: isFocused, in: textView)
+    context.coordinator.syncFirstResponder(to: focused, in: textView)
   }
 
   @MainActor
