@@ -380,8 +380,11 @@ final class PreviewTextView: NSTextView {
       // AppKit installs that selection after this returns, and after the string
       // assignment in updateNSView, so both earlier attempts were overwritten --
       // the caret has to be placed a runloop turn later to survive.
+      // The identity of window.firstResponder is not reliably `self` here (AppKit
+      // may route through a field editor), so this deliberately does not guard on
+      // it -- guarding was why the two earlier attempts silently did nothing.
       DispatchQueue.main.async { [weak self] in
-        guard let self, self.window?.firstResponder === self else { return }
+        guard let self else { return }
         self.setSelectedRange(NSRange(location: (self.string as NSString).length, length: 0))
       }
       onFocusChange?(true)
