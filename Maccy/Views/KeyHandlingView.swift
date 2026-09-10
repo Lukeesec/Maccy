@@ -82,12 +82,6 @@ struct KeyHandlingView<Content: View>: View {
             return .ignored
           }
 
-          // Coming back down off the overflow control returns to the list.
-          if appState.overflowHighlighted {
-            appState.overflowHighlighted = false
-            return .handled
-          }
-
           appState.navigator.highlightNext()
           return .handled
         case .moveToLast:
@@ -100,15 +94,6 @@ struct KeyHandlingView<Content: View>: View {
         case .moveToPrevious:
           guard NSApp.characterPickerWindow == nil else {
             return .ignored
-          }
-
-          // With the footer menu stripped, the overflow control is the only chrome
-          // left, so going up off the first row lands on it instead of stalling.
-          if ForkStyle.isActive, ForkStyle.chrome != .menu,
-             !appState.overflowHighlighted,
-             appState.navigator.isFirstItemHighlighted {
-            appState.overflowHighlighted = true
-            return .handled
           }
 
           appState.navigator.highlightPrevious()
@@ -162,9 +147,26 @@ struct KeyHandlingView<Content: View>: View {
         case .pinOrUnpin:
           appState.togglePin()
           return .handled
-        case .selectCurrentItem where appState.overflowHighlighted,
-             .copyCurrentItem where appState.overflowHighlighted:
-          appState.overflowMenuOpen = true
+        case .selectCurrentItem where appState.actionsFocused,
+             .copyCurrentItem where appState.actionsFocused:
+          appState.actionsMenuOpen = true
+          return .handled
+        case .focusActions:
+          guard ForkStyle.isActive, ForkStyle.actions != .none else { return .ignored }
+          appState.actionsFocused = true
+          return .handled
+        case .focusActionsFromArrow:
+          // Let the caret move when there is text to move through.
+          guard ForkStyle.isActive, ForkStyle.actions != .none,
+                searchQuery.isEmpty, !appState.actionsFocused else {
+            return .ignored
+          }
+          appState.actionsFocused = true
+          return .handled
+        case .unfocusActions:
+          guard appState.actionsFocused else { return .ignored }
+          appState.actionsFocused = false
+          appState.actionsMenuOpen = false
           return .handled
         case .copyCurrentItem:
           // Pass empty flags deliberately. .currentModifierFlags would still carry

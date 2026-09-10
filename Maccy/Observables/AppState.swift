@@ -51,11 +51,11 @@ class AppState: Sendable {
     preview.slideoutWidth = Defaults[.previewWidth]
   }
 
-  /// True when keyboard navigation has moved above the first row onto the header's
-  /// overflow control, so it can draw itself as highlighted and answer Return.
-  var overflowHighlighted: Bool = false
-  /// Drives the overflow popover, so Return and a click do the same thing.
-  var overflowMenuOpen: Bool = false
+  /// True when focus has moved off the list onto the actions control, so it can
+  /// draw itself focused and answer Return.
+  var actionsFocused: Bool = false
+  /// Drives the actions popover, so Return and a click do the same thing.
+  var actionsMenuOpen: Bool = false
 
   @MainActor
   func select(flags modifierFlags: NSEvent.ModifierFlags) {

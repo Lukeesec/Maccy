@@ -38,6 +38,9 @@ enum KeyChord: CaseIterable {
   case openPreferences
   case pinOrUnpin
   case copyCurrentItem
+  case focusActions
+  case focusActionsFromArrow
+  case unfocusActions
   case selectCurrentItem
   case close
   case togglePreview
@@ -126,6 +129,16 @@ enum KeyChord: CaseIterable {
     case (.c, [.control]),
          (.c, [.option]):
       self = .copyCurrentItem
+    // Tab is how macOS moves focus between controls. Right arrow is offered too,
+    // but only reaches the actions control when there is no query to move a caret
+    // through -- the handler makes that call.
+    case (.tab, []):
+      self = .focusActions
+    case (.rightArrow, []):
+      self = .focusActionsFromArrow
+    case (.tab, [.shift]),
+         (.leftArrow, []):
+      self = .unfocusActions
     case (.return, _),
          (.keypadEnter, _):
       self = .selectCurrentItem

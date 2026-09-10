@@ -93,6 +93,7 @@ struct HistoryItemView: View {
       isSelected: item.isSelected,
       selectionIndex: item.multiSelectionIndex,
       selectionAppearance: selectionAppearance,
+      showsActions: true,
       accessibilityLabel: item.accessibilityLabel
     ) {
       Text(verbatim: item.title)

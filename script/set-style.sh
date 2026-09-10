@@ -21,7 +21,8 @@ set -euo pipefail
 
 PLIST="$HOME/Library/Preferences/org.p0deje.Maccy.plist"
 
-KEYS=(forkRowStyle forkChrome forkSelectionStyle forkGrouping showApplicationIcons)
+KEYS=(forkRowStyle forkChrome forkSelectionStyle forkGrouping forkActions
+      showApplicationIcons openPreviewAutomatically)
 
 usage() {
   cat <<EOF
@@ -30,7 +31,9 @@ Variants:
   chrome            stripped | hintBar | menu
   selectionStyle    pill | neutralPill | bar
   grouping          byTime | none
+  actions           rowTrailing | searchRow | hintBar | none
   showIcons         true | false
+  autoPreview       true | false
 
 Pass "default" as the value to clear an override, e.g.
   script/set-style.sh rowStyle default
@@ -56,6 +59,8 @@ case "$1" in
   chrome)         KEY=forkChrome ;;
   selectionStyle) KEY=forkSelectionStyle ;;
   grouping)       KEY=forkGrouping ;;
+  actions)        KEY=forkActions ;;
+  autoPreview)    KEY=openPreviewAutomatically ;;
   showIcons)      KEY=showApplicationIcons ;;
   *) echo "unknown variant: $1" >&2; usage >&2; exit 1 ;;
 esac
@@ -69,7 +74,7 @@ pgrep -x Maccy >/dev/null 2>&1 && { pkill -x Maccy || true; sleep 1; }
 
 if [[ "$2" == "default" ]]; then
   defaults delete "$PLIST" "$KEY" 2>/dev/null || true
-elif [[ "$KEY" == "showApplicationIcons" ]]; then
+elif [[ "$KEY" == "showApplicationIcons" || "$KEY" == "openPreviewAutomatically" ]]; then
   defaults write "$PLIST" "$KEY" -bool "$2"
 else
   defaults write "$PLIST" "$KEY" -string "$2"

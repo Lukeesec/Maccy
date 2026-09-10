@@ -11,10 +11,9 @@ struct HeaderView: View {
     return controller.placement
   }
 
-  /// The app's own actions move here once the footer menu is stripped, the way
-  /// Spotlight keeps its affordances as small trailing glyphs rather than rows.
-  private var overflowVisible: Bool {
-    ForkStyle.isActive && ForkStyle.chrome != .menu
+  /// Only one placement puts the actions control in the search row.
+  private var actionsInSearchRow: Bool {
+    ForkStyle.isActive && ForkStyle.actions == .searchRow
   }
 
   var body: some View {
@@ -47,8 +46,9 @@ struct HeaderView: View {
           .padding(.trailing, Popup.horizontalPadding)
         }
 
-        if overflowVisible {
-          OverflowMenuView()
+        if actionsInSearchRow {
+          ActionsButtonView()
+            .frame(height: 23)
             .padding(.trailing, Popup.horizontalPadding)
         }
       }
@@ -62,70 +62,5 @@ struct HeaderView: View {
     .background(.clear)
     .frame(maxHeight: !appState.searchVisible ? 0 : nil, alignment: .top)
     .readHeight(appState, into: \.popup.headerHeight)
-  }
-}
-
-/// Clear / Settings / About / Quit, folded behind one glyph so the list stays
-/// content-only. Highlightable from the keyboard: arrowing up off the first row
-/// lands here, and Return opens it, the same as clicking.
-struct OverflowMenuView: View {
-  @Environment(AppState.self) private var appState
-
-  private func runFooterItem(named title: String) {
-    guard let item = appState.footer.items.first(where: { $0.title == title }) else { return }
-    if item.confirmation != nil, Defaults[.suppressClearAlert] == false {
-      item.showConfirmation = true
-    } else {
-      item.action()
-    }
-  }
-
-  var body: some View {
-    @Bindable var state = appState
-
-    Button {
-      appState.overflowMenuOpen.toggle()
-    } label: {
-      Image(systemName: "ellipsis.circle")
-        .foregroundStyle(appState.overflowHighlighted ? Color.accentColor : Color.secondary)
-        .padding(3)
-        .background(
-          Circle()
-            .fill(Color.accentColor.opacity(appState.overflowHighlighted ? 0.25 : 0))
-        )
-    }
-    .buttonStyle(.plain)
-    .frame(height: 23)
-    .accessibilityLabel(Text("more_actions_accessibility_label"))
-    .popover(isPresented: $state.overflowMenuOpen, arrowEdge: .bottom) {
-      VStack(alignment: .leading, spacing: 2) {
-        menuButton("clear") { runFooterItem(named: "clear") }
-        Divider().padding(.vertical, 2)
-        menuButton("preferences") { appState.openPreferences() }
-        menuButton("about") {
-          appState.popup.close()
-          NSApp.orderFrontStandardAboutPanel(nil)
-          NSApp.activate(ignoringOtherApps: true)
-        }
-        Divider().padding(.vertical, 2)
-        menuButton("quit") { NSApp.terminate(nil) }
-      }
-      .padding(8)
-      .frame(minWidth: 160, alignment: .leading)
-    }
-  }
-
-  private func menuButton(_ key: String, action: @escaping () -> Void) -> some View {
-    Button {
-      appState.overflowMenuOpen = false
-      action()
-    } label: {
-      Text(LocalizedStringKey(key))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .padding(.horizontal, 6)
-    .padding(.vertical, 3)
   }
 }

@@ -31,6 +31,7 @@ extension Defaults.Keys {
     "forkSelectionStyle", default: .pill, suite: preferencesSuite
   )
   static let forkGrouping = Key<ForkGrouping>("forkGrouping", default: .byTime, suite: preferencesSuite)
+  static let forkActions = Key<ForkActions>("forkActions", default: .rowTrailing, suite: preferencesSuite)
 
   static let clearOnQuit = Key<Bool>("clearOnQuit", default: false, suite: preferencesSuite)
   static let clearSystemClipboard = Key<Bool>("clearSystemClipboard", default: false, suite: preferencesSuite)
@@ -64,7 +65,9 @@ extension Defaults.Keys {
   static let pinTo = Key<PinsPosition>("pinTo", default: .top, suite: preferencesSuite)
   static let popupPosition = Key<PopupPosition>("popupPosition", default: .cursor, suite: preferencesSuite)
   static let popupScreen = Key<Int>("popupScreen", default: 0, suite: preferencesSuite)
-  static let openPreviewAutomatically = Key<Bool>("openPreviewAutomatically", default: true, suite: preferencesSuite)
+  // Defaulted off for the fork: the panel should land on the search field with
+  // nothing else moving. The preview shortcut still opens it on demand.
+  static let openPreviewAutomatically = Key<Bool>("openPreviewAutomatically", default: false, suite: preferencesSuite)
   static let previewDelay = Key<Int>("previewDelay", default: 1500, suite: preferencesSuite)
   static let removeFormattingByDefault = Key<Bool>("removeFormattingByDefault", default: false, suite: preferencesSuite)
   static let searchMode = Key<Search.Mode>("searchMode", default: .exact, suite: preferencesSuite)

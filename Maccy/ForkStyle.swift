@@ -57,6 +57,28 @@ enum ForkSelectionStyle: String, CaseIterable, Identifiable, Defaults.Serializab
   var id: Self { self }
 }
 
+/// Where the actions affordance lives, and therefore how it is reached.
+///
+/// Arrowing up out of the list into a toolbar glyph is not a macOS idiom --
+/// nothing in the system navigates from a list into its own chrome that way.
+/// These all use Tab, which is what macOS uses to move focus between controls,
+/// plus Right arrow when the search field is empty.
+enum ForkActions: String, CaseIterable, Identifiable, Defaults.Serializable {
+  /// A circular button at the trailing edge of the selected row, the way
+  /// Spotlight puts per-result actions on the result itself. Right arrow reaches
+  /// it, Left arrow goes back.
+  case rowTrailing
+  /// One glyph at the trailing edge of the search row. Tab reaches it.
+  case searchRow
+  /// One glyph at the right of the bottom hint bar, keeping the search row clean.
+  case hintBar
+  /// No affordance at all, which is what Spotlight itself does: its settings live
+  /// in System Settings, not in the panel. Cmd+, still works.
+  case none
+
+  var id: Self { self }
+}
+
 /// Whether rows are broken into dated sections.
 enum ForkGrouping: String, CaseIterable, Identifiable, Defaults.Serializable {
   /// Today / Yesterday / This Week / Earlier headers.
@@ -77,6 +99,7 @@ enum ForkStyle {
   static var chrome: ForkChrome { isActive ? Defaults[.forkChrome] : .menu }
   static var selectionStyle: ForkSelectionStyle { isActive ? Defaults[.forkSelectionStyle] : .bar }
   static var grouping: ForkGrouping { isActive ? Defaults[.forkGrouping] : .none }
+  static var actions: ForkActions { isActive ? Defaults[.forkActions] : .none }
 }
 
 /// Section a history item falls into when grouping by time.

@@ -69,8 +69,8 @@ struct ContentView: View {
         }
       } else {
         presented = false
-        appState.overflowHighlighted = false
-        appState.overflowMenuOpen = false
+        appState.actionsFocused = false
+        appState.actionsMenuOpen = false
       }
     }
     .environment(appState)

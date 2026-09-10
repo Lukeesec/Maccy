@@ -91,12 +91,16 @@ struct HintBarView: View {
       if let deleteHint {
         hint(deleteHint, "hint_delete")
       }
+
+      if ForkStyle.actions == .hintBar {
+        ActionsButtonView()
+          .padding(.leading, 2)
+      }
     }
     .padding(.horizontal, Popup.rowInset + 8)
     .padding(.top, 6)
     .padding(.bottom, Popup.verticalPadding + 2)
-    .accessibilityHidden(true)
-  }
+      }
 
   private func hint(_ keys: String, _ labelKey: String) -> some View {
     HStack(spacing: 4) {
