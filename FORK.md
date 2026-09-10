@@ -159,6 +159,31 @@ lives in `~/Library/Application Support/Maccy` and will not appear.
 Delete any leftover `/Applications/Maccy.app.backup-*` and
 `~/Library/Application Support/Maccy.superseded-*` once you are happy.
 
+## Keys
+
+| Key | Does |
+|---|---|
+| <kbd>←</kbd> | Opens the scope picker (empty query). Leaves the preview when it has focus. Moves the caret when there is a query. |
+| <kbd>/</kbd> | Opens the scope picker, on an empty query. |
+| <kbd>→</kbd> | Opens the editable preview and focuses it (empty query, text items only). |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Move through results, or through the scope picker when it is open. |
+| <kbd>↩</kbd> | Copy and close. In the preview, copies the edited draft. Commits the scope when the picker is open. |
+| <kbd>⌃C</kbd> <kbd>⌥C</kbd> | Same as Return, including inside the preview. |
+| <kbd>⌥↩</kbd> | Paste instead of copy. |
+| <kbd>⌫</kbd> | Removes the scope chip when the query is empty. |
+| <kbd>⌃U</kbd> | Clears the query and the chip. |
+| <kbd>⎋</kbd> | Leaves the preview or the picker; a second one closes the popup. |
+| <kbd>⌘,</kbd> | Settings. |
+
+The preview edits a **scratch draft**: copying takes the draft, the stored item is
+never rewritten, and the "Edited" badge is the visible promise of that. The edited
+text does land in history as a *new* entry, because copying it is a clipboard event
+like any other.
+
+> **Known defect.** Focusing the preview leaves its whole contents selected, so the
+> first keystroke replaces the draft instead of extending it. Place the caret first
+> (click, or an arrow key) until this is fixed.
+
 ## Trying the design variants
 
 The contentious parts of the redesign are switchable at runtime so they can be
