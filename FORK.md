@@ -112,31 +112,28 @@ to stock Maccy restores everything.
 
 ## If you are running stock Maccy, here is the upgrade
 
-Your clipboard history and settings survive — they are copied out of the sandbox
-container on first install, as described above. The container itself is left
-untouched.
-
 ```sh
-# 1. Detach Homebrew so it cannot overwrite the fork later.
-#    This removes the app bundle only. History and settings are untouched.
-brew uninstall --cask maccy
-
-# 2. Get a build and install it, by either option above.
+brew uninstall --cask maccy                       # app only; history and settings stay
 git clone https://github.com/Lukeesec/Maccy.git
-cd Maccy
-git checkout spotlight-ui
-script/install-artifact.sh      # no Xcode needed
+cd Maccy && git checkout spotlight-ui
+script/install-artifact.sh                        # no Xcode needed
 ```
 
-**One-time step afterwards.** This build is ad-hoc signed, so macOS treats it as a
-different app for privacy purposes and the old Accessibility grant does not carry
-over. Pasting will not work until you fix that:
+Then re-grant **System Settings → Privacy & Security → Accessibility** for
+`/Applications/Maccy.app`, removing any old Maccy entry first. These builds are
+ad-hoc signed rather than notarized, so macOS treats this as a new app and the
+previous grant does not carry over. Copying works without it; pasting does not.
 
-> System Settings → Privacy & Security → Accessibility
-> Remove the old **Maccy** entry, then add `/Applications/Maccy.app`
+Your history and settings are copied out of the sandbox container on first
+install. The container is left untouched, so reverting restores it exactly.
 
-Either script backs the previous app up to
-`/Applications/Maccy.app.backup-<timestamp>` before replacing it.
+`script/install-artifact.sh` downloads the latest CI build and clears the
+quarantine flag. If you unzip an artifact by hand instead, run
+`xattr -dr com.apple.quarantine Maccy.app` first, or Gatekeeper will refuse to
+open an unnotarized app.
+
+The installer backs the previous app up to
+`/Applications/Maccy.app.backup-<timestamp>`.
 
 ### Optional: finish the Spotlight look
 

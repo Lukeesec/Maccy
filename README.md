@@ -1,3 +1,32 @@
+> ### This is a fork
+>
+> [`Lukeesec/Maccy`](https://github.com/Lukeesec/Maccy), branch **`spotlight-ui`** — adds
+> <kbd>⌃C</kbd>/<kbd>⌥C</kbd> to copy, and rebuilds the popup as a macOS 26 Spotlight-style
+> surface. Upstream's README follows below and describes the **original** app; the
+> instructions in it do not apply here.
+>
+> **Install**
+>
+> ```sh
+> brew uninstall --cask maccy                       # app only; history and settings stay
+> git clone https://github.com/Lukeesec/Maccy.git
+> cd Maccy && git checkout spotlight-ui
+> script/install-artifact.sh                        # no Xcode needed
+> ```
+>
+> Then re-grant **System Settings → Privacy & Security → Accessibility** for
+> `/Applications/Maccy.app`. These builds are ad-hoc signed rather than notarized, so
+> macOS sees a new app and the old grant does not carry over. Copying works without it;
+> pasting does not.
+>
+> `script/install-artifact.sh` pulls the latest CI build and clears the quarantine flag
+> for you. If you unzip an artifact by hand instead, run
+> `xattr -dr com.apple.quarantine Maccy.app` first or Gatekeeper will refuse to open it.
+>
+> Full detail, the revert, and the design switches: **[FORK.md](FORK.md)**.
+
+---
+
 > [!WARNING]
 > **Beware of fake websites impersonating Maccy.** Malicious sites (such as `maccyapp.net` and `maccyapp.com`) distribute malware disguised as Maccy. [**maccy.app**](https://maccy.app) is the **only** official website.
 
