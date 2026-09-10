@@ -158,3 +158,10 @@ upstream retires `Popup.cornerRadius` or reworks `KeyChord`, expect to resolve t
   version bump means it should report you are up to date, but rebuilding from source
   is the real update path.
 - **`brew upgrade --greedy` would clobber it** if you ever reinstall the cask.
+- **Hardened runtime is off in these builds** (`ENABLE_HARDENED_RUNTIME=NO`).
+  It has to be. Hardened runtime turns on library validation, which requires every
+  embedded library to share the app's Team ID — and an ad-hoc signature has no Team
+  ID, so `Sparkle.framework` fails to map and the app aborts at launch with a dyld
+  `Library missing` error. Both build paths assert the flag is absent so this cannot
+  regress silently. Upstream's own signed releases keep hardened runtime on, as they
+  should; it is only incompatible with ad-hoc signing.

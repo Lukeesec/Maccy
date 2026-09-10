@@ -41,6 +41,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
+            ENABLE_HARDENED_RUNTIME=NO \
             build
 
       - name: Verify and package
@@ -55,6 +56,20 @@ jobs:
           echo "--- signature ---"
           codesign -dv "$APP" 2>&1 || true
           codesign --verify --deep --strict "$APP" && echo "signature verifies"
+
+          # Hardened runtime turns on library validation, which requires every
+          # embedded library to share the app's Team ID. An ad-hoc signature has
+          # no Team ID, so Sparkle.framework fails to map and the app dies at
+          # launch with a dyld "Library missing" abort. Catch it here rather than
+          # on the user's machine.
+          FLAGS="$(codesign -dv --verbose=4 "$APP" 2>&1 | sed -n 's/.*flags=\([^ ]*\).*/\1/p')"
+          echo "signing flags: $FLAGS"
+          case "$FLAGS" in
+            *runtime*)
+              echo "::error::hardened runtime is on for an ad-hoc signed build; embedded frameworks will fail library validation at launch"
+              exit 1
+              ;;
+          esac
 
           echo "--- architectures ---"
           lipo -archs "$APP/Contents/MacOS/Maccy"

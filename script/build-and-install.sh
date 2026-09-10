@@ -52,10 +52,22 @@ xcodebuild \
   CODE_SIGN_STYLE=Manual \
   DEVELOPMENT_TEAM="" \
   PROVISIONING_PROFILE_SPECIFIER="" \
+  ENABLE_HARDENED_RUNTIME=NO \
   build
 
 APP_BUILT="$DERIVED/Build/Products/Release/Maccy.app"
 [[ -d "$APP_BUILT" ]] || die "build reported success but $APP_BUILT is missing"
+
+# Hardened runtime turns on library validation, which requires every embedded
+# library to share the app's Team ID. An ad-hoc signature has none, so
+# Sparkle.framework fails to map and the app aborts at launch with a dyld
+# "Library missing" error.
+FLAGS="$(codesign -dv --verbose=4 "$APP_BUILT" 2>&1 | sed -n 's/.*flags=\([^ ]*\).*/\1/p')"
+case "$FLAGS" in
+  *runtime*) die "built app has the hardened runtime flag ($FLAGS) under an ad-hoc
+       signature; it would abort at launch. ENABLE_HARDENED_RUNTIME=NO did not
+       take effect." ;;
+esac
 
 BUILT_VERSION="$(defaults read "$APP_BUILT/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo '?')"
 step "Built Maccy $BUILT_VERSION at $APP_BUILT"
