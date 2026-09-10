@@ -12,7 +12,7 @@ struct PreviewItemView: View {
   /// Only plain text is editable. An image has nothing to type into, and a file
   /// item's "text" is a path the pasteboard does not carry as a string.
   private var isEditable: Bool {
-    ForkStyle.isActive && !item.hasImage && item.item.fileURLs.isEmpty
+    PreviewEditor.isEditable(item)
   }
 
   @ViewBuilder
@@ -302,12 +302,30 @@ struct EditablePreviewTextView: NSViewRepresentable {
       isFocused = focused
     }
 
-    /// Focus is only ever pushed *into* the pane, never out of it: whatever sets
-    /// the flag back to false is also the thing that focuses something else, and
-    /// that move resigns this view on its own. Taking first responder away here
-    /// would leave the window with nothing focused at all.
+    /// Focus moves both ways. The original contract here was that whatever
+    /// cleared the flag would also focus something else, and that this view would
+    /// resign as a side effect — but no caller did, so clearing the flag left the
+    /// text view still first responder while the pane redrew itself unfocused,
+    /// and every later keystroke kept landing in the draft. Resigning explicitly
+    /// hands the window back to SwiftUI, whose @FocusState then reasserts the
+    /// search field.
     func syncFirstResponder(to focused: Bool, in textView: PreviewTextView) {
-      guard focused, !isSyncingFocus, let window = textView.window else { return }
+      guard !isSyncingFocus, let window = textView.window else { return }
+
+      if !focused {
+        guard window.firstResponder === textView
+                || window.firstResponder === textView.currentEditor() else { return }
+        isSyncingFocus = true
+        DispatchQueue.main.async { [weak self, weak textView] in
+          defer { self?.isSyncingFocus = false }
+          guard let textView, let window = textView.window else { return }
+          guard window.firstResponder === textView
+                  || window.firstResponder === textView.currentEditor() else { return }
+          window.makeFirstResponder(nil)
+        }
+        return
+      }
+
       guard window.firstResponder !== textView else { return }
 
       isSyncingFocus = true
@@ -333,7 +351,8 @@ final class PreviewTextView: NSTextView {
     36,  // Return
     76,  // Enter (keypad)
     48,  // Tab
-    53   // Escape
+    53,  // Escape
+    123  // Left arrow — the documented way back out to the list
   ]
 
   override func becomeFirstResponder() -> Bool {
@@ -353,6 +372,18 @@ final class PreviewTextView: NSTextView {
     // Shift-Return is the one way to type a newline into the draft.
     if isReturn, event.modifierFlags.contains(.shift) {
       super.keyDown(with: event)
+      return
+    }
+
+    // Anything carrying a command-ish modifier belongs to the popup, not to the
+    // field. Listing key codes was not enough: ⌃C and ⌥C are the fork's copy
+    // shortcuts, and left to NSTextView the first is swallowed and the second
+    // inserts a "ç". This is the same trap KeyChord guards against one layer up.
+    let commandish = event.modifierFlags
+      .intersection(.deviceIndependentFlagsMask)
+      .intersection([.command, .control, .option])
+    if !commandish.isEmpty {
+      nextResponder?.keyDown(with: event)
       return
     }
 

@@ -14,6 +14,16 @@ import Observation
 final class PreviewEditor {
   static let shared = PreviewEditor()
 
+  /// Whether an item can be edited in the preview at all.
+  ///
+  /// Lives here so the pane and the keyboard cannot drift: focusing an item the
+  /// pane will not render as a field leaves `isFocused` stuck true with nothing
+  /// on screen, which silently kills Up/Down navigation.
+  static func isEditable(_ item: HistoryItemDecorator?) -> Bool {
+    guard ForkStyle.isActive, let item else { return false }
+    return !item.hasImage && item.item.fileURLs.isEmpty
+  }
+
   /// True when keyboard focus is inside the preview pane.
   var isFocused: Bool = false
 
@@ -80,6 +90,10 @@ final class PreviewEditor {
   }
 
   private func reset() {
+    // Focus is cleared here too. Leaving it set with no pane on screen strands
+    // Up/Down navigation, and the only thing that used to clear it was a
+    // notification that may be missed or reordered.
+    isFocused = false
     itemID = nil
     original = ""
     draftStorage = ""

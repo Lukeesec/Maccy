@@ -218,6 +218,11 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
             appState.preview.togglePreview()
           }
           PreviewEditor.shared.begin(item: item)
+          // Focusing an item the pane renders read-only would strand isFocused
+          // at true with no field on screen, which silently disables Up/Down.
+          guard PreviewEditor.isEditable(appState.navigator.leadHistoryItem) else {
+            return .handled
+          }
           PreviewEditor.shared.isFocused = true
           return .handled
         case .arrowLeft:
@@ -227,6 +232,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           // discarding the edit.
           if PreviewEditor.shared.isFocused {
             PreviewEditor.shared.isFocused = false
+            searchFocused = true
             return .handled
           }
           if appState.actionsFocused {
@@ -253,6 +259,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           // Escape steps out of the preview first. A second one closes the
           // popup, as it always has.
           PreviewEditor.shared.isFocused = false
+          searchFocused = true
           return .handled
         case .close:
           appState.popup.close()

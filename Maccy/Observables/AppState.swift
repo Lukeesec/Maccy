@@ -76,7 +76,11 @@ class AppState: Sendable {
 
   @MainActor
   func openScopePicker() {
-    guard ForkStyle.isActive, !scopePickerOpen else { return }
+    // The picker is drawn as an overlay on the search row. With the row hidden
+    // (showSearch off, or searchVisibility == .duringSearch on an empty query)
+    // it would open invisibly and still swallow Up/Down/Return/Escape, silently
+    // filtering the list with no visible cause.
+    guard ForkStyle.isActive, searchVisible, !scopePickerOpen else { return }
     // Open on what is already committed, so Return with no movement is a no-op
     // rather than a silent reset to "All items".
     scopePickerSelection = .scope(scope)
