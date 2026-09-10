@@ -82,6 +82,12 @@ struct KeyHandlingView<Content: View>: View {
             return .ignored
           }
 
+          // Coming back down off the overflow control returns to the list.
+          if appState.overflowHighlighted {
+            appState.overflowHighlighted = false
+            return .handled
+          }
+
           appState.navigator.highlightNext()
           return .handled
         case .moveToLast:
@@ -94,6 +100,15 @@ struct KeyHandlingView<Content: View>: View {
         case .moveToPrevious:
           guard NSApp.characterPickerWindow == nil else {
             return .ignored
+          }
+
+          // With the footer menu stripped, the overflow control is the only chrome
+          // left, so going up off the first row lands on it instead of stalling.
+          if ForkStyle.isActive, ForkStyle.chrome != .menu,
+             !appState.overflowHighlighted,
+             appState.navigator.isFirstItemHighlighted {
+            appState.overflowHighlighted = true
+            return .handled
           }
 
           appState.navigator.highlightPrevious()
@@ -146,6 +161,10 @@ struct KeyHandlingView<Content: View>: View {
           return .handled
         case .pinOrUnpin:
           appState.togglePin()
+          return .handled
+        case .selectCurrentItem where appState.overflowHighlighted,
+             .copyCurrentItem where appState.overflowHighlighted:
+          appState.overflowMenuOpen = true
           return .handled
         case .copyCurrentItem:
           // Pass empty flags deliberately. .currentModifierFlags would still carry

@@ -31,6 +31,9 @@ Variants:
   selectionStyle    pill | neutralPill | bar
   grouping          byTime | none
   showIcons         true | false
+
+Pass "default" as the value to clear an override, e.g.
+  script/set-style.sh rowStyle default
 EOF
 }
 
@@ -57,19 +60,26 @@ case "$1" in
   *) echo "unknown variant: $1" >&2; usage >&2; exit 1 ;;
 esac
 
-if [[ "$KEY" == "showApplicationIcons" ]]; then
+# Quit BEFORE writing. A running Maccy holds the domain in memory and can flush
+# its cached copy over the new value on the way out, which looks exactly like the
+# setting silently refusing to change.
+osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
+for _ in $(seq 1 20); do pgrep -x Maccy >/dev/null 2>&1 || break; sleep 0.25; done
+pgrep -x Maccy >/dev/null 2>&1 && { pkill -x Maccy || true; sleep 1; }
+
+if [[ "$2" == "default" ]]; then
+  defaults delete "$PLIST" "$KEY" 2>/dev/null || true
+elif [[ "$KEY" == "showApplicationIcons" ]]; then
   defaults write "$PLIST" "$KEY" -bool "$2"
 else
   defaults write "$PLIST" "$KEY" -string "$2"
 fi
 
-# cfprefsd caches aggressively; without this the app keeps reading the old value.
+# cfprefsd caches aggressively; without this the app reads the old value straight
+# back out of the cache.
 killall cfprefsd 2>/dev/null || true
 sleep 1
 
-osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
-for _ in $(seq 1 20); do pgrep -x Maccy >/dev/null 2>&1 || break; sleep 0.25; done
-pgrep -x Maccy >/dev/null 2>&1 && { pkill -x Maccy || true; sleep 1; }
 open /Applications/Maccy.app
 
 echo

@@ -26,21 +26,26 @@ struct HeaderView: View {
         )
         .padding(.horizontal, Popup.horizontalPadding)
 
-        ToolbarButton {
-          controller.togglePreview()
-        } label: {
-          Image(
-            systemName: previewPlacement == .right
-              ? "sidebar.left" : "sidebar.right"
+        // The preview toggle is dropped once the redesign is active: a system
+        // surface does not put a window-management control in its search row.
+        // The shortcut still toggles the preview.
+        if !ForkStyle.isActive {
+          ToolbarButton {
+            controller.togglePreview()
+          } label: {
+            Image(
+              systemName: previewPlacement == .right
+                ? "sidebar.left" : "sidebar.right"
+            )
+          }
+          .shortcutKeyHelp(
+            name: .togglePreview,
+            key: controller.state.isOpen ? "ClosePreview" : "OpenPreview",
+            tableName: "PreviewItemView",
+            replacementKey: "previewKey"
           )
+          .padding(.trailing, Popup.horizontalPadding)
         }
-        .shortcutKeyHelp(
-          name: .togglePreview,
-          key: controller.state.isOpen ? "ClosePreview" : "OpenPreview",
-          tableName: "PreviewItemView",
-          replacementKey: "previewKey"
-        )
-        .padding(.trailing, overflowVisible ? 4 : Popup.horizontalPadding)
 
         if overflowVisible {
           OverflowMenuView()
@@ -61,7 +66,8 @@ struct HeaderView: View {
 }
 
 /// Clear / Settings / About / Quit, folded behind one glyph so the list stays
-/// content-only.
+/// content-only. Highlightable from the keyboard: arrowing up off the first row
+/// lands here, and Return opens it, the same as clicking.
 struct OverflowMenuView: View {
   @Environment(AppState.self) private var appState
 
@@ -75,43 +81,51 @@ struct OverflowMenuView: View {
   }
 
   var body: some View {
-    Menu {
-      Button {
-        runFooterItem(named: "clear")
-      } label: {
-        Text(LocalizedStringKey("clear"))
-      }
+    @Bindable var state = appState
 
-      Divider()
-
-      Button {
-        appState.openPreferences()
-      } label: {
-        Text(LocalizedStringKey("preferences"))
-      }
-
-      Button {
-        appState.popup.close()
-        NSApp.orderFrontStandardAboutPanel(nil)
-        NSApp.activate(ignoringOtherApps: true)
-      } label: {
-        Text(LocalizedStringKey("about"))
-      }
-
-      Divider()
-
-      Button {
-        NSApp.terminate(nil)
-      } label: {
-        Text(LocalizedStringKey("quit"))
-      }
+    Button {
+      appState.overflowMenuOpen.toggle()
     } label: {
       Image(systemName: "ellipsis.circle")
+        .foregroundStyle(appState.overflowHighlighted ? Color.accentColor : Color.secondary)
+        .padding(3)
+        .background(
+          Circle()
+            .fill(Color.accentColor.opacity(appState.overflowHighlighted ? 0.25 : 0))
+        )
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
+    .buttonStyle(.plain)
     .frame(height: 23)
     .accessibilityLabel(Text("more_actions_accessibility_label"))
+    .popover(isPresented: $state.overflowMenuOpen, arrowEdge: .bottom) {
+      VStack(alignment: .leading, spacing: 2) {
+        menuButton("clear") { runFooterItem(named: "clear") }
+        Divider().padding(.vertical, 2)
+        menuButton("preferences") { appState.openPreferences() }
+        menuButton("about") {
+          appState.popup.close()
+          NSApp.orderFrontStandardAboutPanel(nil)
+          NSApp.activate(ignoringOtherApps: true)
+        }
+        Divider().padding(.vertical, 2)
+        menuButton("quit") { NSApp.terminate(nil) }
+      }
+      .padding(8)
+      .frame(minWidth: 160, alignment: .leading)
+    }
+  }
+
+  private func menuButton(_ key: String, action: @escaping () -> Void) -> some View {
+    Button {
+      appState.overflowMenuOpen = false
+      action()
+    } label: {
+      Text(LocalizedStringKey(key))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .padding(.horizontal, 6)
+    .padding(.vertical, 3)
   }
 }
