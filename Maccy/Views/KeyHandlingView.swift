@@ -276,7 +276,12 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           // preview's opening layout pass, leaving the editor flag stale and the
           // arrow keys locked.
           searchFocused = false
-          PreviewEditor.shared.isFocused = true
+          let itemID = item.id
+          DispatchQueue.main.async {
+            guard appState.preview.state.isOpen,
+                  appState.navigator.leadHistoryItem?.id == itemID else { return }
+            PreviewEditor.shared.isFocused = true
+          }
           return .handled
         case .arrowLeft:
           // Left arrow walks back out of whatever the right arrow walked into,
