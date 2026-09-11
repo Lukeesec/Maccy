@@ -110,26 +110,37 @@ enum KeyChord: CaseIterable {
     }
   }
 
-  /// True when the event is the physical Escape key.
+  /// True when the event is Command+C, Ctrl+C or Option+C, read off the hardware
+  /// key code.
   ///
-  /// Read straight off the key code rather than through `KeyChord`, which
-  /// classifies Escape differently depending on what else is open and is
-  /// therefore exactly the wrong thing to ask when the question is "how do I get
-  /// out of here". 53 is Escape on every layout.
-  /// True when the event is Ctrl+C or Option+C, read off the hardware key code.
+  /// All three, because "the Alt key" is not a fixed thing: on a PC-layout
+  /// keyboard the key printed Alt sits where Command does and macOS reports it as
+  /// Command, so a user pressing what they call Alt+C is sending ⌘C. Rather than
+  /// guess which one a given keyboard produces, accept every modifier that can
+  /// plausibly be under that finger.
   ///
-  /// Option+C produces a character ("ç"), so it can be consumed as text input
-  /// before the chord table ever sees it -- which is why Ctrl+C worked and
-  /// Option+C did not. Reading the code sidesteps whoever ate it.
+  /// Note this takes ⌘C away from the search field: with a scope chip and query
+  /// selected, ⌘C copies the highlighted history item rather than the query text.
+  /// That is the intended trade in a clipboard popup.
+  ///
+  /// Read off the key code rather than through the chord table because Option+C
+  /// produces a character ("ç") and is consumed as text input before the table
+  /// ever sees it -- which is why Ctrl+C worked and Option+C did not.
   static func isCopyShortcut(_ event: NSEvent?) -> Bool {
     guard let event, event.type == .keyDown, Int(event.keyCode) == kVK_ANSI_C else { return false }
 
     let flags = event.modifierFlags
       .intersection(.deviceIndependentFlagsMask)
       .subtracting([.capsLock, .numericPad, .function])
-    return flags == [.control] || flags == [.option]
+    return flags == [.command] || flags == [.control] || flags == [.option]
   }
 
+  /// True when the event is the physical Escape key.
+  ///
+  /// Read straight off the key code rather than through `KeyChord`, which
+  /// classifies Escape differently depending on what else is open and is
+  /// therefore exactly the wrong thing to ask when the question is "how do I get
+  /// out of here". 53 is Escape on every layout.
   static func isEscape(_ event: NSEvent?) -> Bool {
     guard let event, event.type == .keyDown else { return false }
 
@@ -207,11 +218,15 @@ enum KeyChord: CaseIterable {
       self = .pinOrUnpin
     case (.comma, [.command]):
       self = .openPreferences
-    // Ctrl+C and Option+C both mirror Enter: copy the highlighted item and close.
-    // These must stay above the modifier catch-all further down, which would
-    // otherwise classify them as .ignored and pass them to the search field --
-    // where Option+C in particular would insert a "ç" rather than doing nothing.
-    case (.c, [.control]),
+    // Command+C, Ctrl+C and Option+C all mirror Enter: copy the highlighted item
+    // and close. See isCopyShortcut for why all three. These must stay above the
+    // modifier catch-all further down, which would otherwise classify them as
+    // .ignored and pass them to the search field -- where Option+C in particular
+    // would insert a "ç" rather than doing nothing. They also sit above the
+    // configurable preview shortcut, so a user who binds preview to one of these
+    // loses it here.
+    case (.c, [.command]),
+         (.c, [.control]),
          (.c, [.option]):
       self = .copyCurrentItem
     // Tab is how macOS moves focus between controls, and is all that is left of

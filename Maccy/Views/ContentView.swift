@@ -88,6 +88,12 @@ struct ContentView: View {
     .opacity(ForkStyle.isActive ? (presented ? 1 : 0) : 1)
     .animation(.easeInOut(duration: 0.2), value: appState.searchVisible)
     .onChange(of: scenePhase) {
+      // Either direction: the remembered hover names a row in a list that is
+      // about to be, or has just been, rebuilt. Left set, the first mouse
+      // movement after the popup opens yanks the selection to wherever the
+      // pointer happened to be parked last time.
+      appState.navigator.forgetHoverSelection()
+
       if scenePhase == .active {
         withAnimation(entranceAnimation) {
           presented = true
@@ -98,6 +104,18 @@ struct ContentView: View {
         appState.actionsMenuOpen = false
         // The popup is gone; a scratch edit does not outlive it.
         PreviewEditor.shared.begin(item: nil)
+      }
+    }
+    // Put the caret back in the search field when something outside SwiftUI gave
+    // the keyboard up. See AppState.searchRefocusToken for why this cannot just
+    // be `searchFocused = true`: the binding already reads true, so assigning it
+    // moves nothing. Drop it and re-assert it a runloop turn later, so the focus
+    // actually travels from whatever state AppKit left it in.
+    .onChange(of: appState.searchRefocusToken) {
+      PreviewEditor.shared.isFocused = false
+      searchFocused = false
+      DispatchQueue.main.async {
+        searchFocused = true
       }
     }
     .environment(appState)

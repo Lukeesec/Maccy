@@ -4,21 +4,11 @@ private struct HoverSelectionModifier: ViewModifier {
   @Environment(AppState.self) private var appState
   var id: UUID
 
-  /// Hovering must not retarget the row while the preview is open.
-  ///
-  /// The preview is opened deliberately for one item, and the pointer has to
-  /// travel across the list to reach it. Every row it crosses on the way was
-  /// changing the selection, so by the time the click landed the preview was
-  /// showing a different item and the editor had been reset out from under the
-  /// edit. Auto-open is off in this fork, so an open preview means the user
-  /// asked for it: treat it as a focused mode.
+  /// The rule now lives on the navigator, which owns the remembered hover and is
+  /// the only place that can also refuse to *apply* it. See
+  /// `NavigationManager.hoverSelectionSuppressed`.
   private var hoverSelectionSuppressed: Bool {
-    // Not just .isOpen: resizing the panel as the preview animates in moves the
-    // rows under a stationary pointer, and ContentView's onMouseMove clears
-    // isKeyboardNavigating, so the resulting hover retargeted the selection
-    // mid-transition. That is the "arrow right pops my selection to the top".
-    ForkStyle.isActive
-      && (appState.preview.state.isOpen || appState.preview.state.isAnimating)
+    appState.navigator.hoverSelectionSuppressed
   }
 
   func body(content: Content) -> some View {

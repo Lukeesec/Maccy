@@ -9,22 +9,6 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
 
   @Environment(AppState.self) private var appState
 
-  /// Put the caret back in the search field.
-  ///
-  /// The preview is an `NSTextView`, which takes first responder behind SwiftUI's
-  /// back, so `searchFocused` can still read true while the field plainly does
-  /// not have the key -- and assigning true to a binding that already holds true
-  /// moves nothing at all. Drop it and re-assert it a runloop turn later, so the
-  /// focus actually travels whatever state it was left in.
-  @MainActor
-  private func refocusSearch() {
-    let field = $searchFocused
-    searchFocused = false
-    DispatchQueue.main.async {
-      field.wrappedValue = true
-    }
-  }
-
   /// True when the preview genuinely owns the keyboard.
   ///
   /// `PreviewEditor.isFocused` is set in one place and cleared in several, and if
@@ -83,14 +67,10 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
         // Escape when the preview is open at all, not merely when it believes it
         // has focus. The reported lock-up is precisely the case where that flag
         // disagrees with reality, so it must not be the thing Escape depends on.
-        if KeyChord.isEscape(event),
-           PreviewEditor.shared.isFocused || appState.preview.state.isOpen {
-          PreviewEditor.shared.isFocused = false
-          appState.closeScopePicker()
-          if appState.preview.state.isOpen {
-            appState.preview.togglePreview()
-          }
-          refocusSearch()
+        //
+        // On macOS 26 the event monitor usually gets here first; this stays as
+        // the path for the pre-Tahoe build, and as a backstop.
+        if KeyChord.isEscape(event), appState.leavePreview() {
           return .handled
         }
 
@@ -299,8 +279,10 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           // The draft is deliberately left alone: leaving the preview is not
           // discarding the edit.
           if PreviewEditor.shared.isFocused {
+            // Not leavePreview(): Left arrow steps out of the *editor* and leaves
+            // the pane showing. Clearing the flag is what asks for the keyboard
+            // back -- see PreviewEditor.isFocused.
             PreviewEditor.shared.isFocused = false
-            refocusSearch()
             return .handled
           }
           if appState.actionsFocused {

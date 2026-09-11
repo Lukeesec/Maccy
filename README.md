@@ -1,7 +1,7 @@
 > ### This is a fork
 >
 > [`Lukeesec/Maccy`](https://github.com/Lukeesec/Maccy), branch **`spotlight-ui`** — adds
-> <kbd>⌃C</kbd>/<kbd>⌥C</kbd> to copy, and rebuilds the popup as a macOS 26 Spotlight-style
+> <kbd>⌘C</kbd>/<kbd>⌃C</kbd>/<kbd>⌥C</kbd> to copy, and rebuilds the popup as a macOS 26 Spotlight-style
 > surface. Upstream's README follows below and describes the **original** app; the
 > instructions in it do not apply here.
 >

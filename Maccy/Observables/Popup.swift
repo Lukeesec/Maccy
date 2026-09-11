@@ -204,6 +204,26 @@ class Popup {
       return nil
     }
 
+    // Escape out of the preview, from here rather than from onKeyPress.
+    //
+    // onKeyPress only fires while something inside the panel is first responder,
+    // and the preview is an NSTextView that can leave the window with no
+    // responder at all when it resigns -- at which point every key in the popup,
+    // Escape included, does nothing and the user is stuck with no way out but
+    // clicking away. This monitor runs ahead of the responder chain, so it works
+    // in that state too. Only swallow the event when there was in fact something
+    // to leave; otherwise Escape falls through and still closes the popup.
+    // `preview.state` is the synchronous test because it is the one piece of this
+    // that is not main-actor isolated, and it is also sufficient: the editor
+    // cannot hold focus unless the pane it lives in is open.
+    if ForkStyle.isActive, !isClosed(), KeyChord.isEscape(event),
+       AppState.shared.preview.state.isOpen {
+      Task { @MainActor in
+        AppState.shared.leavePreview()
+      }
+      return nil
+    }
+
     if isHotKeyCode(Int(event.keyCode)) {
       if let item = History.shared.pressedShortcutItem {
         AppState.shared.navigator.select(item: item)

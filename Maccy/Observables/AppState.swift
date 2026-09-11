@@ -51,6 +51,26 @@ class AppState: Sendable {
     preview.slideoutWidth = Defaults[.previewWidth]
   }
 
+  /// Bumped whenever something outside SwiftUI has taken the keyboard and the
+  /// search field has to be put back.
+  ///
+  /// The preview is an `NSTextView`: it takes first responder behind SwiftUI's
+  /// back, and giving it up again with `makeFirstResponder(nil)` leaves the
+  /// *window* as first responder while SwiftUI's `@FocusState` still reads true.
+  /// Assigning true to a binding that already holds true moves nothing, so focus
+  /// never came back -- and with no responder, `onKeyPress` stops firing and every
+  /// key in the popup goes dead, Escape included. That is the lock-up.
+  ///
+  /// A counter rather than a Bool so that two requests in a row are two events,
+  /// and so the observer never has to reset it. ContentView owns the FocusState
+  /// and watches this.
+  private(set) var searchRefocusToken: Int = 0
+
+  /// Ask ContentView to re-assert focus on the search field.
+  func refocusSearch() {
+    searchRefocusToken &+= 1
+  }
+
   /// True when focus has moved off the list onto the actions control, so it can
   /// draw itself focused and answer Return.
   var actionsFocused: Bool = false
@@ -136,6 +156,32 @@ class AppState: Sendable {
     scopePickerOpen = false
     popup.scopePickerHeight = 0
     popup.needsResize = true
+  }
+
+  /// Back out of the preview: drop its focus, take the scope picker down with it,
+  /// close the pane, and hand the keyboard back to the search field.
+  ///
+  /// Returns false when there was nothing to leave, so Escape can go on meaning
+  /// "close the popup".
+  ///
+  /// One function rather than two copies because it is reached from two different
+  /// layers on purpose. The normal route is SwiftUI's `onKeyPress`; the event
+  /// monitor calls it as well, because `onKeyPress` only fires while something
+  /// inside the panel is first responder, and the whole class of bug this guards
+  /// against is the preview leaving nothing as first responder at all. Escape has
+  /// to work when the rest of the keyboard does not.
+  @MainActor
+  @discardableResult
+  func leavePreview() -> Bool {
+    guard PreviewEditor.shared.isFocused || preview.state.isOpen else { return false }
+
+    PreviewEditor.shared.isFocused = false
+    closeScopePicker()
+    if preview.state.isOpen {
+      preview.togglePreview()
+    }
+    refocusSearch()
+    return true
   }
 
   /// Escape: the picker goes away and the typed text is left exactly as it is.

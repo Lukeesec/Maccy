@@ -168,7 +168,7 @@ Delete any leftover `/Applications/Maccy.app.backup-*` and
 | <kbd>→</kbd> | Opens the editable preview and focuses it (empty query, text items only). |
 | <kbd>↑</kbd> <kbd>↓</kbd> | Move through results, or through the scope picker when it is open. |
 | <kbd>↩</kbd> | Copy and close. In the preview, copies the edited draft. Commits the scope when the picker is open. |
-| <kbd>⌃C</kbd> <kbd>⌥C</kbd> | Same as Return, including inside the preview. |
+| <kbd>⌘C</kbd> <kbd>⌃C</kbd> <kbd>⌥C</kbd> | Same as Return, including inside the preview. All three, because a PC-layout keyboard reports the key printed Alt as Command. This takes <kbd>⌘C</kbd> away from the search field. |
 | <kbd>⌥↩</kbd> | Paste instead of copy. |
 | <kbd>⌫</kbd> | Removes the scope chip when the query is empty. |
 | <kbd>⌃U</kbd> | Clears the query and the chip. |

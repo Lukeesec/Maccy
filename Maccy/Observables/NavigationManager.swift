@@ -65,14 +65,50 @@ class NavigationManager { // swiftlint:disable:this type_body_length
     return isManualMultiSelect || selection.count > 1
   }
 
+  /// Hovering must not retarget the row while the preview is open.
+  ///
+  /// The preview is opened deliberately for one item, and the pointer has to
+  /// travel across the list to reach it. Auto-open is off in this fork, so an
+  /// open preview means the user asked for it: treat it as a focused mode.
+  ///
+  /// This lives here, next to the state it guards, rather than in the view that
+  /// records the hover. It was only in the view before, which is exactly how the
+  /// bug survived two attempts at it: suppressing the *write* left
+  /// `hoverSelectionWhileKeyboardNavigating` holding a row from before the
+  /// preview opened, and the next mouse movement -- the movement that carries the
+  /// pointer over to click into the editor -- still applied it.
+  var hoverSelectionSuppressed: Bool {
+    ForkStyle.isActive
+      && (AppState.shared.preview.state.isOpen || AppState.shared.preview.state.isAnimating)
+  }
+
+  /// The row the pointer is currently over, remembered while the keyboard is
+  /// driving so that going back to the mouse picks up where the pointer sits.
+  ///
+  /// `onHover` only fires when the pointer crosses a row boundary, so this cannot
+  /// be recomputed on demand -- it has to be remembered. That makes it a landmine
+  /// if it is ever left holding a row the user has since moved off, or a row from
+  /// a previous time the popup was open, which is why `forgetHoverSelection()`
+  /// exists and is called whenever the list stops being what it was.
   var hoverSelectionWhileKeyboardNavigating: UUID?
+
+  /// Drop the remembered hover. Cheap, and the safe thing to do any time the
+  /// pointer's row is no longer known to be current.
+  func forgetHoverSelection() {
+    hoverSelectionWhileKeyboardNavigating = nil
+  }
+
   var isKeyboardNavigating: Bool = true {
     didSet {
-      if !isKeyboardNavigating && !isMultiSelectInProgress,
-         let hoverSelection = hoverSelectionWhileKeyboardNavigating {
-        hoverSelectionWhileKeyboardNavigating = nil
-        select(id: hoverSelection)
-      }
+      guard !isKeyboardNavigating, !isMultiSelectInProgress,
+            let hoverSelection = hoverSelectionWhileKeyboardNavigating else { return }
+
+      // Consumed either way: whatever happens next, this is no longer a fresh
+      // reading of where the pointer is.
+      hoverSelectionWhileKeyboardNavigating = nil
+      guard !hoverSelectionSuppressed else { return }
+
+      select(id: hoverSelection)
     }
   }
 
@@ -82,13 +118,16 @@ class NavigationManager { // swiftlint:disable:this type_body_length
     scrollTarget = id
   }
 
+  /// Select whatever the id names. An id that names nothing is ignored rather
+  /// than treated as "select nothing": its only caller is the remembered hover,
+  /// which can outlive the row it points at, and clearing the selection there
+  /// leaves the popup with no lead item -- which in turn makes Up, Down and Return
+  /// all no-ops with nothing on screen to say why.
   func select(id: UUID) {
     if let item = history.items.first(where: { $0.id == id }) {
       select(item: item, footerItem: nil)
     } else if let item = footer.items.first(where: { $0.id == id }) {
       select(item: nil, footerItem: item)
-    } else {
-      select(item: nil, footerItem: nil)
     }
   }
 
