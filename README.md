@@ -39,9 +39,9 @@ script/install-artifact.sh
 ```
 
 The installer downloads the public release without authentication, verifies its
-checksum, signature, architecture, version, and minimum macOS version, safely
-migrates existing history, backs up `/Applications/Maccy.app`, installs the new
-app, and launches it.
+checksum, signature, architecture, bundle identity, version/build metadata, and
+minimum macOS version, safely migrates existing history, backs up
+`/Applications/Maccy.app`, installs the new app, and launches it.
 
 Afterward, remove any old Maccy entry and add `/Applications/Maccy.app` under
 **System Settings → Privacy & Security → Accessibility**. Copying works without
@@ -81,14 +81,19 @@ The unsandboxed fork uses:
 
 Before first install, Maccy is stopped and SQLite creates a consistent snapshot
 from the stock sandbox container. The source container is never moved or
-modified, so reverting preserves the stock app's original history and settings:
+modified. To return to stock with Homebrew, quit Maccy and move the fork aside so
+the cask does not collide with `/Applications/Maccy.app`:
 
 ```sh
+osascript -e 'tell application "Maccy" to quit'
+mv /Applications/Maccy.app "/Applications/Maccy.app.spotlight-backup-$(date +%Y%m%d-%H%M%S)"
 brew install --cask maccy
 ```
 
-Items copied while using this fork remain in its unsandboxed store and will not
-appear in stock Maccy.
+This moves only the application; both data stores remain intact. Items copied
+while using the fork stay in its unsandboxed store and do not appear in stock
+Maccy. Remove the old Accessibility entry and grant access to the newly installed
+`/Applications/Maccy.app`; move the backup to Trash once the stock app is working.
 
 ## Building and testing
 

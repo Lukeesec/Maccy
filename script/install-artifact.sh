@@ -62,6 +62,16 @@ ditto -x -k "$ZIP" "$WORKDIR/unpacked"
 APP_SRC="$WORKDIR/unpacked/Maccy.app"
 [[ -d "$APP_SRC" ]] || die "the zip did not contain Maccy.app"
 
+INFO_PLIST="$APP_SRC/Contents/Info.plist"
+[[ -f "$INFO_PLIST" ]] || die "the app is missing Contents/Info.plist"
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST" 2>/dev/null || true)"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST" 2>/dev/null || true)"
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST" 2>/dev/null || true)"
+[[ "$BUNDLE_ID" == "org.p0deje.Maccy" ]] || \
+  die "unexpected bundle identifier '${BUNDLE_ID:-missing}'; refusing to install"
+[[ -n "$VERSION" ]] || die "the app has no version metadata; refusing to install"
+[[ -n "$BUILD" ]] || die "the app has no build metadata; refusing to install"
+
 step "Clearing the quarantine flag"
 xattr -dr com.apple.quarantine "$APP_SRC" 2>/dev/null || true
 
@@ -78,8 +88,6 @@ case " $ARCHITECTURES " in
   *) die "this release does not support $HOST_ARCH (contains: $ARCHITECTURES)" ;;
 esac
 
-VERSION="$(defaults read "$APP_SRC/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo '?')"
-BUILD="$(defaults read "$APP_SRC/Contents/Info.plist" CFBundleVersion 2>/dev/null || echo '?')"
 echo "Maccy $VERSION ($BUILD), architectures: $ARCHITECTURES"
 
 if command -v brew >/dev/null 2>&1 && brew list --cask maccy >/dev/null 2>&1; then
