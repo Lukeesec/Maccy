@@ -103,6 +103,8 @@ enum KeyChord: CaseIterable {
     case (.return, _),
          (.keypadEnter, _):
       return .commitScope
+    case (.rightArrow, []):
+      return .closeScopePicker
     case (.escape, _):
       return .closeScopePicker
     default:

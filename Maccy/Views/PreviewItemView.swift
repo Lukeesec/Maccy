@@ -359,9 +359,9 @@ struct EditablePreviewTextView: NSViewRepresentable {
 }
 
 /// An `NSTextView` that reports first-responder changes and refuses to swallow the
-/// popup's own keys. Return pastes, Escape closes, and Tab moves focus. Every
-/// arrow-key variant stays in the editor for caret movement, selection and
-/// scrolling; the user leaves editing with Escape or the mouse.
+/// popup's own keys. Return pastes, Escape leaves editing, and Tab moves focus.
+/// Every arrow-key variant stays in the editor for caret movement, selection and
+/// scrolling; a later Escape can close the still-visible preview.
 final class PreviewTextView: NSTextView {
   var onFocusChange: (@MainActor (Bool) -> Void)?
 

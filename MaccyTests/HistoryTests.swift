@@ -322,6 +322,54 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     }
   }
 
+  func testScopePickerRightArrowDismissesPicker() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Scope picker is enabled by the macOS 26 fork")
+    }
+
+    AppState.shared.scopePickerOpen = true
+    defer { AppState.shared.resetScopePicker() }
+
+    guard case .closeScopePicker = KeyChord(.rightArrow, []) else {
+      return XCTFail("Expected Right arrow to dismiss the open scope picker")
+    }
+  }
+
+  func testScopePickerAlignmentHeightTracksVisibleRows() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Scope picker is enabled by the macOS 26 fork")
+    }
+
+    XCTAssertEqual(
+      ScopePickerView.contentHeight(for: ScopePickerRow.ordered),
+      183
+    )
+    XCTAssertEqual(
+      ScopePickerView.contentHeight(for: [.settings]),
+      38
+    )
+  }
+
+  func testFirstPreviewEscapeOnlyLeavesEditorFocus() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Editable preview is enabled by the macOS 26 fork")
+    }
+
+    let previousState = AppState.shared.preview.state
+    let item = history.add(historyItem("escape preview draft"))
+    PreviewEditor.shared.begin(item: item)
+    PreviewEditor.shared.isFocused = true
+    AppState.shared.preview.state = .open
+    defer {
+      PreviewEditor.shared.begin(item: nil)
+      AppState.shared.preview.state = previousState
+    }
+
+    XCTAssertTrue(AppState.shared.handlePreviewEscape())
+    XCTAssertFalse(PreviewEditor.shared.isFocused)
+    XCTAssertTrue(AppState.shared.preview.state.isOpen)
+  }
+
   func testPagedHistoryRemainsCompleteScrollableAndSearchable() async throws {
     guard ForkStyle.isActive else {
       throw XCTSkip("Paged history is enabled by the macOS 26 fork")

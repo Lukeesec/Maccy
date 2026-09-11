@@ -245,22 +245,23 @@ class Popup {
       return nil
     }
 
-    // Escape out of the preview, from here rather than from onKeyPress.
+    // Escape out of the preview one layer at a time, from here rather than from
+    // onKeyPress.
     //
     // onKeyPress only fires while something inside the panel is first responder,
     // and the preview is an NSTextView that can leave the window with no
     // responder at all when it resigns -- at which point every key in the popup,
     // Escape included, does nothing and the user is stuck with no way out but
     // clicking away. This monitor runs ahead of the responder chain, so it works
-    // in that state too. Only swallow the event when there was in fact something
-    // to leave; otherwise Escape falls through and still closes the popup.
+    // in that state too. The first press leaves editor focus, the second closes
+    // the still-visible preview, and only the next may close the popup.
     // `preview.state` is the synchronous test because it is the one piece of this
     // that is not main-actor isolated, and it is also sufficient: the editor
     // cannot hold focus unless the pane it lives in is open.
     if ForkStyle.isActive, !isClosed(), KeyChord.isEscape(event),
        AppState.shared.preview.state.isOpen {
       Task { @MainActor in
-        AppState.shared.leavePreview()
+        AppState.shared.handlePreviewEscape()
       }
       return nil
     }

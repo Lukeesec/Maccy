@@ -64,18 +64,18 @@ enters at the first result; Up enters at the last.
 | Key | Action |
 |---|---|
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move through history or the open scope picker; history wraps at both ends |
-| <kbd>←</kbd> | Search row: open scopes/settings outside the panel; history row: open Copy & paste without formatting |
+| <kbd>←</kbd> | Search row: open top-aligned scopes/settings outside the panel; history row: open Copy & paste without formatting |
 | <kbd>/</kbd> | Type a scope command such as `/links` and open its picker outside the panel |
-| <kbd>→</kbd> | Open the selected text item's editable preview |
+| <kbd>→</kbd> | Close the open scopes/settings picker; otherwise open the selected text item's editable preview |
 | <kbd>↩</kbd> | Copy, paste at the cursor, and close; from the preview, paste the draft |
 | <kbd>⌥↩</kbd> | Run the configured alternate action (see Settings) |
 | <kbd>⌘C</kbd> / <kbd>⌃C</kbd> / <kbd>⌥C</kbd> | Copy and close, including from the preview |
-| <kbd>⎋</kbd> | Leave the preview or picker; press again to close |
+| <kbd>⎋</kbd> | Leave editor focus, close the preview, then close the popup—one layer per press; also closes the picker |
 
 Preview edits are scratch copies. They never rewrite the stored history item;
 copying an edited draft creates a new clipboard-history entry.
-While editing, all arrow keys remain inside the editor. Use Escape or the mouse
-to leave it.
+While editing, all arrow keys remain inside the editor. The first Escape or a
+mouse click leaves editing without closing the preview; another Escape closes it.
 
 ## Data and reverting
 

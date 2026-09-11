@@ -33,7 +33,7 @@ struct ListHeaderView: View {
           }
           if scenePhase == .background {
             // The panel is reused between showings, so a picker left open would
-            // still be down the next time it appears -- and an Escape dismissal
+            // still be down the next time it appears -- and a keyboard dismissal
             // does not outlive the popup either.
             appState.resetScopePicker()
           }

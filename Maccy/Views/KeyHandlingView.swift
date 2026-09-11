@@ -47,15 +47,15 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           }
         }
 
-        // Escape gets out of the preview, unconditionally.
+        // Escape backs out of the preview one layer at a time.
         //
         // Deliberately ahead of KeyChord and of every guard below. KeyChord
         // reclassifies Escape as the scope picker's Escape whenever the picker
         // thinks it is open, and the bug this fixes is precisely that some other
         // piece of state disagrees about who owns the key -- so nothing here may
-        // depend on that state being consistent. Read the raw key code, drop the
-        // focus, take the picker down with it, hand the field back. A second
-        // Escape then closes the popup, as it always has.
+        // depend on that state being consistent. Read the raw key code: first
+        // leave editor focus, then close the pane, then let a later press close
+        // the popup.
         // Copy is checked first and off the key code: Option+C produces a
         // character and was being eaten as text input before the chord table saw
         // it, which is why Ctrl+C worked and Option+C did not.
@@ -74,7 +74,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
         //
         // On macOS 26 the event monitor usually gets here first; this stays as
         // the path for the pre-Tahoe build, and as a backstop.
-        if KeyChord.isEscape(event), appState.leavePreview() {
+        if KeyChord.isEscape(event), appState.handlePreviewEscape() {
           return .handled
         }
 
@@ -277,9 +277,9 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           appState.commitScopePicker()
           return .handled
         case .closeScopePicker:
-          // Escape takes the picker down and leaves whatever was typed exactly
-          // where it is -- including a "/..." that would otherwise reopen it on
-          // the very next keystroke.
+          // Escape or Right takes the picker down and leaves whatever was typed
+          // exactly where it is -- including a "/..." that would otherwise
+          // reopen it on the very next keystroke.
           appState.dismissScopePicker()
           return .handled
         case .clearScope:

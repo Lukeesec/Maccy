@@ -144,9 +144,9 @@ class AppState: Sendable {
   /// field when the scope is committed.
   var scopePickerIsCommand: Bool = false
 
-  /// Set when Escape dismisses a command picker. The "/..." is still sitting in
-  /// the field at that point, so without this the next keystroke would open the
-  /// picker straight back up and Escape would read as broken.
+  /// Set when Escape or Right dismisses a command picker. The "/..." is still
+  /// sitting in the field at that point, so without this the next keystroke
+  /// would open the picker straight back up and dismissal would read as broken.
   private var scopeCommandDismissed: Bool = false
 
   /// What has been typed after the leading "/".
@@ -190,11 +190,12 @@ class AppState: Sendable {
     scopePickerOpen = false
   }
 
-  /// Back out of the preview: drop its focus, take the scope picker down with it,
-  /// close the pane, and hand the keyboard back to the search field.
+  /// Back out of the preview one layer at a time.
   ///
-  /// Returns false when there was nothing to leave, so Escape can go on meaning
-  /// "close the popup".
+  /// The first Escape while editing only gives the editor's focus back to the
+  /// search field and deliberately leaves the pane visible. A later Escape
+  /// closes the pane. Returns false only when neither layer was present, so the
+  /// event can go on to mean "close the popup".
   ///
   /// One function rather than two copies because it is reached from two different
   /// layers on purpose. The normal route is SwiftUI's `onKeyPress`; the event
@@ -204,19 +205,30 @@ class AppState: Sendable {
   /// to work when the rest of the keyboard does not.
   @MainActor
   @discardableResult
-  func leavePreview() -> Bool {
-    guard PreviewEditor.shared.isFocused || preview.state.isOpen else { return false }
-
-    PreviewEditor.shared.isFocused = false
-    closeScopePicker()
-    if preview.state.isOpen {
-      preview.togglePreview()
+  func handlePreviewEscape() -> Bool {
+    let focusFlagWasSet = PreviewEditor.shared.isFocused
+    let responderIsEditor = NSApp.keyWindow?.firstResponder is PreviewTextView
+    if focusFlagWasSet || responderIsEditor {
+      PreviewEditor.shared.isFocused = false
+      closeScopePicker()
+      // Clearing a true flag already asks for this through its didSet. The
+      // responder check repairs the inverse disagreement: AppKit owns the editor
+      // even though the observable flag was lost.
+      if !focusFlagWasSet {
+        refocusSearch()
+      }
+      return true
     }
+
+    guard preview.state.isOpen else { return false }
+
+    closeScopePicker()
+    preview.togglePreview()
     refocusSearch()
     return true
   }
 
-  /// Escape: the picker goes away and the typed text is left exactly as it is.
+  /// Escape or Right: the picker goes away and typed text is left exactly as it is.
   @MainActor
   func dismissScopePicker() {
     if scopePickerIsCommand {
@@ -226,7 +238,7 @@ class AppState: Sendable {
     closeScopePicker()
   }
 
-  /// Forget everything about the picker, including an Escape dismissal. Called
+  /// Forget everything about the picker, including a keyboard dismissal. Called
   /// when the popup goes away, which is the one moment the typed "/..." stops
   /// being the user's current train of thought.
   func resetScopePicker() {

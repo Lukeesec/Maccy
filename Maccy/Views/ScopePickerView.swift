@@ -17,9 +17,9 @@ import SwiftUI
 //     a chip in front of the query,
 //   * Backspace on an empty query removes the chip again.
 //
-// The picker is a native popover anchored to the chevron. Like the per-history
-// plain-text action, it lives outside the panel instead of moving or covering
-// the results inside it.
+// The picker is a native popover anchored beside the search row. Like the
+// per-history plain-text action, it lives outside the panel instead of moving or
+// covering the results inside it, and its top edge stays level with the panel.
 //
 // Everything here is macOS 26 only. On 14/15 the chevron is never drawn and the
 // key handlers all return .ignored, so the field behaves exactly as upstream's.
@@ -133,6 +133,15 @@ struct ScopeIndicatorView: View {
   private var glyphSize: CGFloat { max(9, Popup.searchIconSize - 8) }
   private var boxSize: CGFloat { glyphSize + 8 }
 
+  /// The chevron sits in the vertical center of the 56-point search row. A
+  /// popover attached to its own tiny bounds is therefore centered near the top
+  /// of the panel and sticks out above it. Give AppKit an invisible positioning
+  /// rectangle whose top is the panel top and whose height matches the current
+  /// picker; centering equal-height rectangles makes their top edges level.
+  private var popoverAnchorTopOffset: CGFloat {
+    Popup.verticalPadding + (Popup.searchFieldHeight - boxSize) / 2
+  }
+
   private var pickerPresented: Binding<Bool> {
     Binding(
       get: { appState.scopePickerOpen },
@@ -159,8 +168,17 @@ struct ScopeIndicatorView: View {
       .onTapGesture {
         appState.toggleScopePicker()
       }
-      .popover(isPresented: pickerPresented, arrowEdge: .leading) {
-        ScopePickerView()
+      .overlay(alignment: .top) {
+        Color.clear
+          .frame(
+            width: boxSize,
+            height: ScopePickerView.contentHeight(for: appState.scopePickerRows)
+          )
+          .offset(y: -popoverAnchorTopOffset)
+          .allowsHitTesting(false)
+          .popover(isPresented: pickerPresented, arrowEdge: .leading) {
+            ScopePickerView()
+          }
       }
       .animation(.easeInOut(duration: 0.12), value: isOpen)
       .accessibilityLabel(Text("scope_picker_accessibility_label"))
@@ -205,7 +223,22 @@ struct ScopePickerView: View {
   private static let tokenWidth: CGFloat = 52
   private static let rowHeight: CGFloat = 26
   private static let rowSpacing: CGFloat = 1
+  private static let dividerHeight: CGFloat = 9
   private static let containerPadding: CGFloat = 6
+
+  /// Exact content height of the current picker, used by the external popover's
+  /// positioning rectangle to keep its top level with the main panel even while
+  /// a typed command filters the rows.
+  static func contentHeight(for rows: [ScopePickerRow]) -> CGFloat {
+    guard !rows.isEmpty else { return 0 }
+
+    let hasDivider = rows.contains(.settings) && rows.count > 1
+    let elementCount = rows.count + (hasDivider ? 1 : 0)
+    return CGFloat(rows.count) * rowHeight
+      + CGFloat(max(0, elementCount - 1)) * rowSpacing
+      + (hasDivider ? dividerHeight : 0)
+      + containerPadding * 2
+  }
 
   private var rows: [ScopePickerRow] { appState.scopePickerRows }
 
