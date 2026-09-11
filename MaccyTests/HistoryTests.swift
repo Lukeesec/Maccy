@@ -350,7 +350,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     )
   }
 
-  func testFirstPreviewEscapeOnlyLeavesEditorFocus() throws {
+  func testPreviewEscapeBacksOutOneLayerPerPress() throws {
     guard ForkStyle.isActive else {
       throw XCTSkip("Editable preview is enabled by the macOS 26 fork")
     }
@@ -368,6 +368,11 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertTrue(AppState.shared.handlePreviewEscape())
     XCTAssertFalse(PreviewEditor.shared.isFocused)
     XCTAssertTrue(AppState.shared.preview.state.isOpen)
+
+    XCTAssertTrue(AppState.shared.handlePreviewEscape())
+    XCTAssertFalse(AppState.shared.preview.state.isOpen)
+
+    XCTAssertFalse(AppState.shared.handlePreviewEscape())
   }
 
   func testPagedHistoryRemainsCompleteScrollableAndSearchable() async throws {
