@@ -191,6 +191,19 @@ class Popup {
   }
 
   private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+    // Ctrl+C / Option+C are caught here, in the local event monitor, rather than
+    // in SwiftUI's onKeyPress. Option+C is a character-producing combination: by
+    // the time the responder chain reaches the search field it has already been
+    // turned into "ç" and consumed as text input, which is why Ctrl+C worked and
+    // Option+C did not. This monitor runs before the responder chain, so it sees
+    // the event either way. Returning nil swallows it so nothing types a "ç".
+    if ForkStyle.isActive, !isClosed(), KeyChord.isCopyShortcut(event) {
+      Task { @MainActor in
+        AppState.shared.select(flags: [])
+      }
+      return nil
+    }
+
     if isHotKeyCode(Int(event.keyCode)) {
       if let item = History.shared.pressedShortcutItem {
         AppState.shared.navigator.select(item: item)
