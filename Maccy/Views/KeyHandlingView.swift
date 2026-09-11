@@ -271,17 +271,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           guard PreviewEditor.isEditable(appState.navigator.leadHistoryItem) else {
             return .handled
           }
-          // Give up SwiftUI's claim before the AppKit text view asks to become
-          // first responder. Otherwise the field can reclaim focus during the
-          // preview's opening layout pass, leaving the editor flag stale and the
-          // arrow keys locked.
-          searchFocused = false
-          let itemID = item.id
-          DispatchQueue.main.async {
-            guard appState.preview.state.isOpen,
-                  appState.navigator.leadHistoryItem?.id == itemID else { return }
-            PreviewEditor.shared.isFocused = true
-          }
+          PreviewEditor.shared.isFocused = true
           return .handled
         case .arrowLeft:
           // Left arrow walks back out of whatever the right arrow walked into,
