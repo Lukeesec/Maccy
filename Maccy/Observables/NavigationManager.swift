@@ -32,6 +32,12 @@ class NavigationManager { // swiftlint:disable:this type_body_length
     didSet {
       guard oldValue?.id != leadHistoryItem?.id else { return }
 
+      NSLog(
+        "MaccySelection lead %@ -> %@",
+        oldValue?.id.uuidString ?? "nil",
+        leadHistoryItem?.id.uuidString ?? "nil"
+      )
+
       // Announce the visual selection change, keeping repeated navigation updates concise.
       if let item = leadHistoryItem {
         announceForAccessibility {
@@ -124,6 +130,7 @@ class NavigationManager { // swiftlint:disable:this type_body_length
   /// leaves the popup with no lead item -- which in turn makes Up, Down and Return
   /// all no-ops with nothing on screen to say why.
   func select(id: UUID) {
+    NSLog("MaccySelection select(id:) %@", id.uuidString)
     if let item = history.items.first(where: { $0.id == id }) {
       select(item: item, footerItem: nil)
     } else if let item = footer.items.first(where: { $0.id == id }) {
@@ -189,6 +196,7 @@ class NavigationManager { // swiftlint:disable:this type_body_length
   }
 
   func selectWithoutScrolling(id: UUID) {
+    NSLog("MaccySelection selectWithoutScrolling(id:) %@", id.uuidString)
     if let stack = history.pasteStack,
        stack.id == id {
       selectWithoutScrolling(item: nil, footerItem: nil)

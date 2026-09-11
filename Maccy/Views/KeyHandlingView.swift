@@ -262,6 +262,13 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           }
           guard let item = appState.navigator.leadHistoryItem else { return .ignored }
 
+          NSLog(
+            "MaccySelection Right lead=%@ preview=%@ focused=%@",
+            item.id.uuidString,
+            String(describing: appState.preview.state),
+            PreviewEditor.shared.isFocused.description
+          )
+
           if !appState.preview.state.isOpen {
             appState.preview.togglePreview()
           }

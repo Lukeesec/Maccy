@@ -356,6 +356,11 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
   /// The single place `items` is recomputed from `all`, the scope and the query.
   @MainActor
   private func refreshItems(resetSelection: Bool) {
+    NSLog(
+      "MaccySelection refreshItems reset=%@ queryEmpty=%@",
+      resetSelection.description,
+      searchQuery.isEmpty.description
+    )
     updateItems(search.search(string: searchQuery, within: searchCandidates()))
 
     guard resetSelection else { return }
