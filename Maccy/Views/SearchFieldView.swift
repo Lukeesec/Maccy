@@ -47,6 +47,9 @@ struct SearchFieldView: View {
           .lineLimit(1)
           .textFieldStyle(.plain)
           .font(.system(size: Popup.searchFontSize, weight: .regular))
+          .simultaneousGesture(TapGesture().onEnded {
+            appState.focusSearchRow()
+          })
           .onSubmit {
             appState.activateSelection(flags: .currentModifierFlags)
           }
@@ -87,6 +90,9 @@ struct SearchFieldView: View {
           .disableAutocorrection(true)
           .lineLimit(1)
           .textFieldStyle(.plain)
+          .simultaneousGesture(TapGesture().onEnded {
+            appState.focusSearchRow()
+          })
           .onSubmit {
             appState.activateSelection(flags: .currentModifierFlags)
           }
