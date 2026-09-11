@@ -1,87 +1,100 @@
 #!/usr/bin/env bash
-#
-# Install a Maccy.app built by the "Build fork" GitHub Actions workflow.
-# Needs no Xcode — only Command Line Tools, which every Mac with git already has.
-#
-# Usage:
-#   script/install-artifact.sh                  # fetch the latest CI build via gh
-#   script/install-artifact.sh ~/Downloads/Maccy.zip
+# Install the latest published Spotlight-fork release, or a supplied Maccy.zip.
+# No GitHub account, GitHub CLI, or Xcode is required.
 
 set -euo pipefail
 
 APP_DEST="/Applications/Maccy.app"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RELEASE_BASE="${MACCY_RELEASE_BASE_URL:-https://github.com/Lukeesec/Maccy/releases/latest/download}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
 die() { printf '\nerror: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
 
-# --- obtain the zip ----------------------------------------------------------
+quit_maccy() {
+  if ! pgrep -x Maccy >/dev/null 2>&1; then
+    return
+  fi
+
+  step "Quitting Maccy before reading or replacing its data"
+  osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    pgrep -x Maccy >/dev/null 2>&1 || return
+    sleep 0.25
+  done
+
+  pkill -x Maccy >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    pgrep -x Maccy >/dev/null 2>&1 || return
+    sleep 0.25
+  done
+
+  die "Maccy is still running; quit it manually and run the installer again"
+}
+
+OS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
+if [[ ! "$OS_MAJOR" =~ ^[0-9]+$ ]] || (( OS_MAJOR < 14 )); then
+  die "Maccy requires macOS 14 or newer (this Mac reports $(sw_vers -productVersion))"
+fi
 
 ZIP="${1:-}"
-
 if [[ -z "$ZIP" ]]; then
-  command -v gh >/dev/null 2>&1 || die "gh is not installed. Pass a downloaded zip instead:
-       script/install-artifact.sh ~/Downloads/Maccy.zip"
+  command -v curl >/dev/null 2>&1 || die "curl is required to download the release"
+  command -v shasum >/dev/null 2>&1 || die "shasum is required to verify the release"
 
-  # Pin to the fork explicitly. This checkout also has an "upstream" remote, and
-  # gh would otherwise resolve to p0deje/Maccy, which has no such workflow.
-  ORIGIN_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
-  [[ -n "$ORIGIN_URL" ]] || die "cannot determine the fork's repository (no 'origin' remote).
-       Pass a downloaded zip instead: script/install-artifact.sh ~/Downloads/Maccy.zip"
-  REPO_SLUG="$(printf '%s' "$ORIGIN_URL" | sed -E 's#^.*github\.com[:/]##; s#\.git$##')"
+  step "Downloading the latest public release"
+  curl --fail --location --retry 3 --show-error \
+    "$RELEASE_BASE/Maccy.zip" --output "$WORKDIR/Maccy.zip"
+  curl --fail --location --retry 3 --show-error \
+    "$RELEASE_BASE/Maccy.zip.sha256" --output "$WORKDIR/Maccy.zip.sha256"
 
-  step "Downloading the latest successful CI build from $REPO_SLUG"
-  RUN_ID="$(gh run list --repo "$REPO_SLUG" --workflow=build-fork.yml --status=success \
-              --limit=1 --json databaseId --jq '.[0].databaseId')"
-  [[ -n "$RUN_ID" ]] || die "no successful 'Build fork' run found in $REPO_SLUG.
-       Check: gh run list --repo $REPO_SLUG --workflow=build-fork.yml"
-
-  echo "run $RUN_ID"
-  gh run download "$RUN_ID" --repo "$REPO_SLUG" --name Maccy-spotlight --dir "$WORKDIR"
+  step "Checking the published SHA-256 checksum"
+  (cd "$WORKDIR" && shasum -a 256 --check Maccy.zip.sha256) || \
+    die "release checksum does not match; refusing to install"
   ZIP="$WORKDIR/Maccy.zip"
 fi
 
 [[ -f "$ZIP" ]] || die "no such file: $ZIP"
-
-# --- unpack ------------------------------------------------------------------
 
 step "Unpacking $ZIP"
 ditto -x -k "$ZIP" "$WORKDIR/unpacked"
 APP_SRC="$WORKDIR/unpacked/Maccy.app"
 [[ -d "$APP_SRC" ]] || die "the zip did not contain Maccy.app"
 
-# Anything downloaded from the internet carries a quarantine flag, and this build
-# is ad-hoc signed rather than notarized, so Gatekeeper would refuse to open it.
 step "Clearing the quarantine flag"
 xattr -dr com.apple.quarantine "$APP_SRC" 2>/dev/null || true
 
-step "Checking the signature"
-codesign --verify --strict "$APP_SRC" || die "signature does not verify; refusing to install"
+step "Checking the app signature"
+codesign --verify --deep --strict "$APP_SRC" || \
+  die "signature does not verify; refusing to install"
+
+APP_BINARY="$APP_SRC/Contents/MacOS/Maccy"
+[[ -f "$APP_BINARY" ]] || die "the app executable is missing"
+ARCHITECTURES="$(lipo -archs "$APP_BINARY")"
+HOST_ARCH="$(uname -m)"
+case " $ARCHITECTURES " in
+  *" $HOST_ARCH "*) ;;
+  *) die "this release does not support $HOST_ARCH (contains: $ARCHITECTURES)" ;;
+esac
 
 VERSION="$(defaults read "$APP_SRC/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo '?')"
-echo "Maccy $VERSION"
+BUILD="$(defaults read "$APP_SRC/Contents/Info.plist" CFBundleVersion 2>/dev/null || echo '?')"
+echo "Maccy $VERSION ($BUILD), architectures: $ARCHITECTURES"
 
-# --- install -----------------------------------------------------------------
-
-if brew list --cask maccy >/dev/null 2>&1; then
-  die "Homebrew still manages Maccy. Detach it first so brew cannot overwrite
-       this build (clipboard history and settings are NOT touched):
+if command -v brew >/dev/null 2>&1 && brew list --cask maccy >/dev/null 2>&1; then
+  die "Homebrew still manages Maccy. Detach it first so brew cannot overwrite this build
+       (clipboard history and settings are not touched):
          brew uninstall --cask maccy
-       then re-run this script."
+       then run this installer again."
 fi
+
+# The source database may be in WAL mode. Stop the app before inspecting or
+# copying any part of the store so the migration always sees a closed database.
+quit_maccy
 
 step "Migrating data out of the sandbox container if needed"
 "$(dirname "${BASH_SOURCE[0]}")/migrate-container-data.sh"
-
-step "Quitting Maccy if it is running"
-osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
-for _ in $(seq 1 20); do
-  pgrep -x Maccy >/dev/null 2>&1 || break
-  sleep 0.25
-done
-pgrep -x Maccy >/dev/null 2>&1 && { pkill -x Maccy || true; sleep 1; }
 
 if [[ -d "$APP_DEST" ]]; then
   BACKUP="/Applications/Maccy.app.backup-$(date +%Y%m%d-%H%M%S)"
@@ -97,16 +110,14 @@ open "$APP_DEST"
 
 cat <<EOF
 
-Done. Running Maccy $VERSION.
+Done. Running Maccy $VERSION ($BUILD).
 
 History and settings live at ~/Library/Application Support/Maccy and
-~/Library/Preferences/org.p0deje.Maccy.plist. These builds are not sandboxed --
-an ad-hoc signature cannot satisfy the App Sandbox -- so they do not use
-~/Library/Containers/org.p0deje.Maccy. Your data was copied out of that
-container, which is left intact, so reverting to stock Maccy still finds it.
+~/Library/Preferences/org.p0deje.Maccy.plist. The sandbox container was copied,
+never moved or modified, so reverting to stock Maccy can still read it.
 
-One-time step: this build is ad-hoc signed, so macOS treats it as a new app for
-privacy purposes. Pasting will not work until you re-grant Accessibility:
+This release is ad-hoc signed and macOS treats it as a new app for privacy
+purposes. Pasting will not work until you re-grant Accessibility:
 
   System Settings > Privacy & Security > Accessibility
   Remove the old Maccy entry if present, then add /Applications/Maccy.app

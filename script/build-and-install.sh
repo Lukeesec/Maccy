@@ -23,6 +23,27 @@ BUILD_ONLY=0
 die() { printf '\nerror: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
 
+quit_maccy() {
+  if ! pgrep -x Maccy >/dev/null 2>&1; then
+    return
+  fi
+
+  step "Quitting Maccy before reading or replacing its data"
+  osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    pgrep -x Maccy >/dev/null 2>&1 || return
+    sleep 0.25
+  done
+
+  pkill -x Maccy >/dev/null 2>&1 || true
+  for _ in $(seq 1 20); do
+    pgrep -x Maccy >/dev/null 2>&1 || return
+    sleep 0.25
+  done
+
+  die "Maccy is still running; quit it manually and run the installer again"
+}
+
 # --- preflight ---------------------------------------------------------------
 
 DEVELOPER_DIR_ACTIVE="$(xcode-select -p 2>/dev/null || true)"
@@ -88,23 +109,19 @@ fi
 
 # --- install -----------------------------------------------------------------
 
-if brew list --cask maccy >/dev/null 2>&1; then
+if command -v brew >/dev/null 2>&1 && brew list --cask maccy >/dev/null 2>&1; then
   die "Homebrew still manages Maccy. Detach it first so brew does not overwrite
        this build (your clipboard history and settings are NOT touched):
          brew uninstall --cask maccy
        then re-run this script."
 fi
 
+# Stop first: the Core Data store may be in WAL mode and cannot be copied safely
+# while the process still has it open.
+quit_maccy
+
 step "Migrating data out of the sandbox container if needed"
 "$(dirname "${BASH_SOURCE[0]}")/migrate-container-data.sh"
-
-step "Quitting Maccy if it is running"
-osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
-for _ in $(seq 1 20); do
-  pgrep -x Maccy >/dev/null 2>&1 || break
-  sleep 0.25
-done
-pgrep -x Maccy >/dev/null 2>&1 && { pkill -x Maccy || true; sleep 1; }
 
 if [[ -d "$APP_DEST" ]]; then
   BACKUP="/Applications/Maccy.app.backup-$(date +%Y%m%d-%H%M%S)"

@@ -1,11 +1,4 @@
-# Builds this fork on a GitHub-hosted macOS 26 runner, which has Xcode
-# preinstalled, and uploads the finished app as a downloadable artifact.
-# This exists so the fork can be built without installing ~20GB of Xcode
-# locally: Command Line Tools cannot build Maccy on their own (no actool for
-# Assets.xcassets, no macro plugins for @Model / #Preview).
-#
-# The build is ad-hoc signed, so the download is quarantined and unnotarized.
-# Use script/install-artifact.sh to unpack and install it.
+# Build, test, and publish this fork without requiring Xcode on the installing Mac.
 
 name: Build fork
 
@@ -14,8 +7,15 @@ on:
     branches: [spotlight-ui]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: build-fork-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  test-build-release:
     runs-on: macos-26
 
     steps:
@@ -27,7 +27,26 @@ jobs:
           xcodebuild -version
           echo "SDK: $(xcrun --show-sdk-version)"
 
-      - name: Build
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Maccy.xcodeproj \
+            -scheme Maccy \
+            -configuration Debug \
+            -derivedDataPath test-build \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            -only-testing:MaccyTests \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            ENABLE_HARDENED_RUNTIME=NO \
+            test
+
+      - name: Build universal release
         run: |
           set -o pipefail
           xcodebuild \
@@ -37,6 +56,8 @@ jobs:
             -derivedDataPath build \
             -skipPackagePluginValidation \
             -skipMacroValidation \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
@@ -52,51 +73,86 @@ jobs:
 
       - name: Verify and package
         run: |
+          set -euo pipefail
           APP=build/Build/Products/Release/Maccy.app
           test -d "$APP" || { echo "::error::$APP missing"; exit 1; }
 
-          echo "--- version ---"
-          defaults read "$PWD/$APP/Contents/Info.plist" CFBundleShortVersionString
-          defaults read "$PWD/$APP/Contents/Info.plist" CFBundleVersion
+          VERSION="$(defaults read "$PWD/$APP/Contents/Info.plist" CFBundleShortVersionString)"
+          BUILD="$(defaults read "$PWD/$APP/Contents/Info.plist" CFBundleVersion)"
+          echo "version: $VERSION ($BUILD)"
 
-          echo "--- signature ---"
           codesign -dv "$APP" 2>&1 || true
-          codesign --verify --deep --strict "$APP" && echo "signature verifies"
+          codesign --verify --deep --strict "$APP"
 
-          # Hardened runtime turns on library validation, which requires every
-          # embedded library to share the app's Team ID. An ad-hoc signature has
-          # no Team ID, so Sparkle.framework fails to map and the app dies at
-          # launch with a dyld "Library missing" abort. Catch it here rather than
-          # on the user's machine.
           FLAGS="$(codesign -dv --verbose=4 "$APP" 2>&1 | sed -n 's/.*flags=\([^ ]*\).*/\1/p')"
           echo "signing flags: $FLAGS"
           case "$FLAGS" in
             *runtime*)
-              echo "::error::hardened runtime is on for an ad-hoc signed build; embedded frameworks will fail library validation at launch"
+              echo "::error::hardened runtime is incompatible with this ad-hoc package"
               exit 1
               ;;
           esac
 
-          # An ad-hoc signature cannot satisfy the App Sandbox: secinitd never
-          # replies and the app deadlocks in _libsecinit_appsandbox before AppKit
-          # loads, presenting as a live PID that never opens a window.
           if codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "com.apple.security.app-sandbox"; then
-            echo "::error::app-sandbox entitlement is present on an ad-hoc signed build; it will hang at launch"
+            echo "::error::app-sandbox entitlement is incompatible with this ad-hoc package"
             exit 1
           fi
-          echo "sandbox entitlement correctly absent"
 
-          echo "--- architectures ---"
-          lipo -archs "$APP/Contents/MacOS/Maccy"
+          checked=0
+          while IFS= read -r binary; do
+            file "$binary" | grep -q "Mach-O" || continue
+            architectures="$(lipo -archs "$binary")"
+            echo "$binary: $architectures"
+            case " $architectures " in *" arm64 "*) ;; *) echo "::error::$binary is missing arm64"; exit 1;; esac
+            case " $architectures " in *" x86_64 "*) ;; *) echo "::error::$binary is missing x86_64"; exit 1;; esac
+            checked=$((checked + 1))
+          done < <(find "$APP" -type f)
+          test "$checked" -gt 0 || { echo "::error::no Mach-O binaries found"; exit 1; }
 
-          # ditto preserves the bundle's signature and resource forks; a plain
-          # `zip` does not.
           ditto -c -k --sequesterRsrc --keepParent "$APP" Maccy.zip
-          ls -lh Maccy.zip
+          shasum -a 256 Maccy.zip > Maccy.zip.sha256
+          cat Maccy.zip.sha256
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload short-lived workflow artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Maccy-spotlight
-          path: Maccy.zip
+          path: |
+            Maccy.zip
+            Maccy.zip.sha256
           retention-days: 30
           if-no-files-found: error
+
+      - name: Publish durable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APP=build/Build/Products/Release/Maccy.app
+          VERSION="$(defaults read "$PWD/$APP/Contents/Info.plist" CFBundleShortVersionString)"
+          BUILD="$(defaults read "$PWD/$APP/Contents/Info.plist" CFBundleVersion)"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TAG="v${VERSION}-${BUILD}-${SHORT_SHA}"
+
+          cat > release-notes.md <<EOF
+          Automated, universal build of Maccy ${VERSION} (${BUILD}) from commit ${GITHUB_SHA}.
+
+          - Requires macOS 14 or newer.
+          - Includes arm64 and x86_64 slices.
+          - Ad-hoc signed, unnotarized, unsandboxed, and without hardened runtime.
+          - Verify the download with \`Maccy.zip.sha256\` or use \`script/install-artifact.sh\`.
+          EOF
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" Maccy.zip Maccy.zip.sha256 \
+              --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --latest --notes-file release-notes.md
+          else
+            gh release create "$TAG" Maccy.zip Maccy.zip.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Maccy ${VERSION} (${BUILD}, ${SHORT_SHA})" \
+              --notes-file release-notes.md \
+              --latest
+          fi
