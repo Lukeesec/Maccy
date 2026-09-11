@@ -350,7 +350,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     )
   }
 
-  func testPreviewEscapeBacksOutOneLayerPerPress() throws {
+  func testPreviewEscapeBacksOutOneLayerPerPress() async throws {
     guard ForkStyle.isActive else {
       throw XCTSkip("Editable preview is enabled by the macOS 26 fork")
     }
@@ -369,8 +369,18 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertFalse(PreviewEditor.shared.isFocused)
     XCTAssertTrue(AppState.shared.preview.state.isOpen)
 
+    // Real key presses arrive on separate run-loop turns. Let the focus handoff
+    // settle before exercising the preview layer so this test does not stack two
+    // SwiftUI focus/layout transactions into one pass.
+    try await Task.sleep(for: .milliseconds(300))
+
     XCTAssertTrue(AppState.shared.handlePreviewEscape())
     XCTAssertFalse(AppState.shared.preview.state.isOpen)
+
+    // Closing the preview animates the app's real test window. Waiting through
+    // that animation both mirrors the next human key press and prevents pending
+    // layout work from leaking into the following test.
+    try await Task.sleep(for: .milliseconds(300))
 
     XCTAssertFalse(AppState.shared.handlePreviewEscape())
   }
