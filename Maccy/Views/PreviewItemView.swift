@@ -375,6 +375,33 @@ final class PreviewTextView: NSTextView {
     53   // Escape
   ]
 
+  /// Whether this key belongs to the popup instead of the editor.
+  ///
+  /// Arrows are deliberately excluded even with Command, Control, or Option:
+  /// those modifiers select, move by words/paragraphs, and scroll in NSTextView.
+  /// Keeping the decision independent of the responder chain also makes every
+  /// arrow/modifier combination regression-testable without driving the macOS
+  /// text-input service from a unit-test process.
+  static func shouldRouteToPopup(
+    keyCode: UInt16,
+    modifierFlags: NSEvent.ModifierFlags
+  ) -> Bool {
+    let isReturn = keyCode == 36 || keyCode == 76
+    if isReturn, modifierFlags.contains(.shift) {
+      return false
+    }
+
+    if passthroughKeyCodes.contains(keyCode) {
+      return true
+    }
+
+    let commandish = modifierFlags
+      .intersection(.deviceIndependentFlagsMask)
+      .intersection([.command, .control, .option])
+    let isArrow = [123, 124, 125, 126].contains(keyCode)
+    return !commandish.isEmpty && !isArrow
+  }
+
   override func becomeFirstResponder() -> Bool {
     let accepted = super.becomeFirstResponder()
     if accepted {
@@ -420,27 +447,10 @@ final class PreviewTextView: NSTextView {
   }
 
   override func keyDown(with event: NSEvent) {
-    let isReturn = event.keyCode == 36 || event.keyCode == 76
-    // Shift-Return is the one way to type a newline into the draft.
-    if isReturn, event.modifierFlags.contains(.shift) {
-      super.keyDown(with: event)
-      return
-    }
-
-    // Anything carrying a command-ish modifier belongs to the popup, not to the
-    // field. Listing key codes was not enough: ⌃C and ⌥C are the fork's copy
-    // shortcuts, and left to NSTextView the first is swallowed and the second
-    // inserts a "ç". This is the same trap KeyChord guards against one layer up.
-    let commandish = event.modifierFlags
-      .intersection(.deviceIndependentFlagsMask)
-      .intersection([.command, .control, .option])
-    let isArrow = [123, 124, 125, 126].contains(event.keyCode)
-    if !commandish.isEmpty, !isArrow {
-      nextResponder?.keyDown(with: event)
-      return
-    }
-
-    if Self.passthroughKeyCodes.contains(event.keyCode) {
+    if Self.shouldRouteToPopup(
+      keyCode: event.keyCode,
+      modifierFlags: event.modifierFlags
+    ) {
       nextResponder?.keyDown(with: event)
       return
     }
