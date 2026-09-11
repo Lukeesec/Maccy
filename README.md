@@ -60,12 +60,12 @@ Maccy's built-in updater follows upstream and does not install this fork.
 
 | Key | Action |
 |---|---|
-| <kbd>↑</kbd> / <kbd>↓</kbd> | Move through history or the open scope picker |
-| <kbd>←</kbd> | Open the scope picker when the query is empty |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Move through history or the open scope picker; history wraps at both ends |
+| <kbd>←</kbd> | Search row: open scopes/settings; history row: open Copy & paste without formatting |
 | <kbd>/</kbd> | Type a scope command such as `/links` |
 | <kbd>→</kbd> | Open the selected text item's editable preview |
-| <kbd>↩</kbd> | Copy and close; from the preview, copy the draft |
-| <kbd>⌥↩</kbd> | Paste instead of copy |
+| <kbd>↩</kbd> | Copy, paste at the cursor, and close; from the preview, paste the draft |
+| <kbd>⌥↩</kbd> | Run the configured alternate action (see Settings) |
 | <kbd>⌘C</kbd> / <kbd>⌃C</kbd> / <kbd>⌥C</kbd> | Copy and close, including from the preview |
 | <kbd>⎋</kbd> | Leave the preview or picker; press again to close |
 

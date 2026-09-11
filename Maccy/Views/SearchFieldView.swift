@@ -48,7 +48,7 @@ struct SearchFieldView: View {
           .textFieldStyle(.plain)
           .font(.system(size: Popup.searchFontSize, weight: .regular))
           .onSubmit {
-            appState.select(flags: .currentModifierFlags)
+            appState.activateSelection(flags: .currentModifierFlags)
           }
       }
 
@@ -88,7 +88,7 @@ struct SearchFieldView: View {
           .lineLimit(1)
           .textFieldStyle(.plain)
           .onSubmit {
-            appState.select(flags: .currentModifierFlags)
+            appState.activateSelection(flags: .currentModifierFlags)
           }
 
         if !query.isEmpty {

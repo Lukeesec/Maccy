@@ -600,40 +600,55 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
 
   @MainActor
   func select(_ item: HistoryItemDecorator?, flags modifierFlags: NSEvent.ModifierFlags) {
-    guard let item else {
-      return
+    if modifierFlags.isEmpty {
+      performSelection(
+        item,
+        paste: Defaults[.pasteByDefault],
+        removeFormatting: Defaults[.removeFormattingByDefault]
+      )
+    } else {
+      switch HistoryItemAction(modifierFlags) {
+      case .copy:
+        performSelection(item, paste: false, removeFormatting: false)
+      case .paste:
+        performSelection(item, paste: true, removeFormatting: false)
+      case .pasteWithoutFormatting:
+        performSelection(item, paste: true, removeFormatting: true)
+      case .unknown:
+        return
+      }
     }
+  }
+
+  /// An explicit paste used by the fork's primary Return action and its
+  /// per-entry plain-text action. It deliberately bypasses the global defaults:
+  /// the command itself completely describes what will happen.
+  @MainActor
+  func paste(_ item: HistoryItemDecorator?, removeFormatting: Bool) {
+    performSelection(item, paste: true, removeFormatting: removeFormatting)
+  }
+
+  @MainActor
+  func copy(_ item: HistoryItemDecorator?, removeFormatting: Bool) {
+    performSelection(item, paste: false, removeFormatting: removeFormatting)
+  }
+
+  @MainActor
+  private func performSelection(
+    _ item: HistoryItemDecorator?,
+    paste: Bool,
+    removeFormatting: Bool
+  ) {
+    guard let item else { return }
 
     // Read the draft before anything closes the popup, so it cannot be discarded
     // out from under us by whatever the close path does to the editor.
     let editedText: String? = ForkStyle.isActive ? PreviewEditor.shared.effectiveText : nil
 
-    if modifierFlags.isEmpty {
-      AppState.shared.popup.close()
-      copyToPasteboard(
-        item,
-        editedText: editedText,
-        removeFormatting: Defaults[.removeFormattingByDefault]
-      )
-      if Defaults[.pasteByDefault] {
-        Clipboard.shared.paste()
-      }
-    } else {
-      switch HistoryItemAction(modifierFlags) {
-      case .copy:
-        AppState.shared.popup.close()
-        copyToPasteboard(item, editedText: editedText, removeFormatting: false)
-      case .paste:
-        AppState.shared.popup.close()
-        copyToPasteboard(item, editedText: editedText, removeFormatting: false)
-        Clipboard.shared.paste()
-      case .pasteWithoutFormatting:
-        AppState.shared.popup.close()
-        copyToPasteboard(item, editedText: editedText, removeFormatting: true)
-        Clipboard.shared.paste()
-      case .unknown:
-        return
-      }
+    AppState.shared.popup.close()
+    copyToPasteboard(item, editedText: editedText, removeFormatting: removeFormatting)
+    if paste {
+      Clipboard.shared.paste()
     }
 
     if ForkStyle.isActive {

@@ -60,7 +60,11 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
         // character and was being eaten as text input before the chord table saw
         // it, which is why Ctrl+C worked and Option+C did not.
         if KeyChord.isCopyShortcut(event) {
-          appState.select(flags: [])
+          appState.copySelection()
+          return .handled
+        }
+
+        if KeyChord.isEscape(event), appState.dismissPlainTextAction() {
           return .handled
         }
 
@@ -142,13 +146,22 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
             return .ignored
           }
 
-          appState.navigator.highlightNext()
+          if ForkStyle.isActive, !appState.historyNavigationActive {
+            // The field is the initial logical row. The first Down enters the
+            // result list without skipping the already-highlighted first item.
+            appState.focusHistoryRow()
+            appState.navigator.highlightFirst()
+          } else {
+            appState.focusHistoryRow()
+            appState.navigator.highlightNext()
+          }
           return .handled
         case .moveToLast:
           guard NSApp.characterPickerWindow == nil else {
             return .ignored
           }
 
+          appState.focusHistoryRow()
           appState.navigator.highlightLast()
           return .handled
         case .moveToPrevious:
@@ -161,6 +174,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
             return .ignored
           }
 
+          appState.focusHistoryRow()
           appState.navigator.highlightPrevious()
           return .handled
         case .moveToFirst:
@@ -168,6 +182,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
             return .ignored
           }
 
+          appState.focusHistoryRow()
           appState.navigator.highlightFirst()
           return .handled
         case .extendToNext:
@@ -256,6 +271,9 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           // Right arrow opens the editable preview and puts focus in it. The
           // caret wins whenever there is a query to move through, and the
           // preview keeps the key once it has focus.
+          if appState.dismissPlainTextAction() {
+            return .handled
+          }
           guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen,
                 !PreviewEditor.shared.isFocused else {
             return .ignored
@@ -293,17 +311,19 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen else {
             return .ignored
           }
-          appState.openScopePicker()
+          if appState.historyNavigationActive {
+            appState.openPlainTextAction()
+          } else {
+            appState.openScopePicker()
+          }
           return .handled
         case .copyCurrentItem:
-          // Pass empty flags deliberately. .currentModifierFlags would still carry
-          // .control at this point, and HistoryItemAction maps .control to .unknown,
-          // which returns early and copies nothing. Empty flags take the same path
-          // as an unmodified Return: close, then copy.
-          appState.select(flags: [])
+          // These remain explicit copy-only commands even though bare Return is
+          // now the fork's primary copy-and-paste action.
+          appState.copySelection()
           return .handled
         case .selectCurrentItem:
-          appState.select(flags: .currentModifierFlags)
+          appState.activateSelection(flags: .currentModifierFlags)
           return .handled
         // Escape out of the preview is handled above, before KeyChord runs.
         case .close:

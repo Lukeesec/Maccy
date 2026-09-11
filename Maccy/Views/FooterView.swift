@@ -86,8 +86,8 @@ struct HintBarView: View {
   var body: some View {
     HStack(spacing: 14) {
       Spacer(minLength: 0)
-      hint("↩", "hint_copy")
-      hint("⌥↩", "hint_paste")
+      hint("↩", "hint_paste")
+      hint("←", "hint_plain_text")
       if let deleteHint {
         hint(deleteHint, "hint_delete")
       }

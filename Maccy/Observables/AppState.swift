@@ -77,6 +77,42 @@ class AppState: Sendable {
   /// Drives the actions popover, so Return and a click do the same thing.
   var actionsMenuOpen: Bool = false
 
+  /// The search field stays the real first responder so typing always searches,
+  /// but the fork also needs to know whether arrows have moved the user's
+  /// *keyboard context* into the history list. Left is contextual: from the
+  /// search row it opens scopes/settings; from a history row it opens the
+  /// one-shot plain-text action.
+  var historyNavigationActive: Bool = false
+
+  /// The history row currently presenting its one-shot plain-text action.
+  /// Keeping the identity here makes the popover mutually exclusive across
+  /// recycled list rows and lets Return/Escape operate it from KeyHandlingView.
+  var plainTextActionItemID: UUID?
+
+  func focusSearchRow() {
+    historyNavigationActive = false
+    plainTextActionItemID = nil
+  }
+
+  func focusHistoryRow() {
+    historyNavigationActive = true
+    plainTextActionItemID = nil
+  }
+
+  @discardableResult
+  func dismissPlainTextAction() -> Bool {
+    guard plainTextActionItemID != nil else { return false }
+    plainTextActionItemID = nil
+    return true
+  }
+
+  func openPlainTextAction() {
+    guard ForkStyle.isActive, historyNavigationActive,
+          let item = navigator.leadHistoryItem else { return }
+    closeScopePicker()
+    plainTextActionItemID = item.id
+  }
+
   // MARK: - Scope
 
   /// The scope the history is filtered to, rendered as a chip in the search
@@ -321,6 +357,48 @@ class AppState: Sendable {
       Clipboard.shared.copyInMaccy(history.searchQuery)
       history.searchQuery = ""
     }
+  }
+
+  /// Return in the Tahoe UI is an explicit paste action, independent of the
+  /// global "Paste automatically" preference. The formatting preference still
+  /// supplies the normal mode; modified Return keeps the configurable upstream
+  /// shortcuts, and Return while the row action is open chooses its advertised
+  /// plain-text paste.
+  @MainActor
+  func activateSelection(flags modifierFlags: NSEvent.ModifierFlags) {
+    if let itemID = plainTextActionItemID,
+       let item = navigator.leadHistoryItem,
+       item.id == itemID {
+      paste(item, removeFormatting: true)
+      return
+    }
+
+    let meaningfulFlags = modifierFlags
+      .intersection(.deviceIndependentFlagsMask)
+      .subtracting([.capsLock, .numericPad, .function])
+    if ForkStyle.isActive, meaningfulFlags.isEmpty,
+       let item = navigator.leadHistoryItem {
+      paste(item, removeFormatting: Defaults[.removeFormattingByDefault])
+    } else {
+      select(flags: modifierFlags)
+    }
+  }
+
+  /// The fork's C shortcuts remain copy-only even though Return is now an
+  /// explicit paste. The formatting preference still applies globally.
+  @MainActor
+  func copySelection() {
+    if let item = navigator.leadHistoryItem {
+      history.copy(item, removeFormatting: Defaults[.removeFormattingByDefault])
+    } else {
+      select(flags: [])
+    }
+  }
+
+  @MainActor
+  func paste(_ item: HistoryItemDecorator, removeFormatting: Bool) {
+    plainTextActionItemID = nil
+    history.paste(item, removeFormatting: removeFormatting)
   }
 
   @MainActor

@@ -13,8 +13,9 @@ On macOS 26, this branch adds:
 - A Spotlight-style, appearance-aware popup with taller rows, softer selection,
   revised typography and icons, and configurable grouping and chrome.
 - A docked scope picker for All, Text, Links, Images, and Files. Left arrow opens
-  it from an empty search field; `/text`, `/links`, `/images`, and `/files` work
-  as command-style filters.
+  it from the focused search row; `/text`, `/links`, `/images`, and `/files` work
+  as command-style filters. After Down enters history, Left instead opens a
+  one-shot Copy & paste without formatting action for that row.
 - An editable scratch preview for text items. Copy or paste uses the draft while
   leaving the stored history item unchanged.
 - <kbd>⌘C</kbd>, <kbd>⌃C</kbd>, and <kbd>⌥C</kbd> as copy-and-close shortcuts,
@@ -112,13 +113,13 @@ The previous application is similarly moved to
 
 | Key | Action |
 |---|---|
-| <kbd>←</kbd> | Leave the editor, or open the scope picker from an empty query |
+| <kbd>←</kbd> | Leave the editor; search row: scopes/settings; history row: Copy & paste without formatting |
 | <kbd>/</kbd> | Type a scope command; Return commits a matching scope |
 | <kbd>→</kbd> | Open the selected text item's editable preview |
-| <kbd>↑</kbd> / <kbd>↓</kbd> | Move through results or through the open picker |
-| <kbd>↩</kbd> | Copy and close; from the preview, copy the draft |
-| <kbd>⌘C</kbd> / <kbd>⌃C</kbd> / <kbd>⌥C</kbd> | Same as Return |
-| <kbd>⌥↩</kbd> | Paste instead of copy |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Move through results (wrapping at both ends) or through the open picker |
+| <kbd>↩</kbd> | Copy, paste at the cursor, and close; from the preview, paste the draft |
+| <kbd>⌘C</kbd> / <kbd>⌃C</kbd> / <kbd>⌥C</kbd> | Copy and close without pasting |
+| <kbd>⌥↩</kbd> | Run the configured alternate action (see Settings) |
 | <kbd>⌫</kbd> | Remove the scope chip when the query is empty |
 | <kbd>⌃U</kbd> | Clear the query and scope |
 | <kbd>⎋</kbd> | Leave the preview or picker; a second press closes the popup |

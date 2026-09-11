@@ -29,6 +29,7 @@
 "kind_link" = "Link";
 "hint_copy" = "Copy";
 "hint_paste" = "Paste";
+"hint_plain_text" = "Plain text";
 "hint_delete" = "Delete";
 "scope_all" = "All items";
 "scope_text" = "Text";
@@ -40,3 +41,5 @@
 "preview_edited_badge" = "Edited";
 "preview_copy_edited" = "Copy edited";
 "preview_paste_edited" = "Paste edited";
+"paste_without_formatting_action" = "Copy & paste without formatting";
+"paste_without_formatting_hint" = "Copies as plain text and pastes at the cursor";

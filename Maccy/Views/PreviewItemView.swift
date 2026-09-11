@@ -359,7 +359,7 @@ struct EditablePreviewTextView: NSViewRepresentable {
 }
 
 /// An `NSTextView` that reports first-responder changes and refuses to swallow the
-/// popup's own keys. Return copies, Escape closes, Tab moves focus — none of them
+/// popup's own keys. Return pastes, Escape closes, Tab moves focus — none of them
 /// belong to the field. Shift-Return is left alone so a newline is still typable.
 final class PreviewTextView: NSTextView {
   var onFocusChange: (@MainActor (Bool) -> Void)?

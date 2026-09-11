@@ -80,6 +80,19 @@ struct HistoryItemView: View {
     }
   }
 
+  private var plainTextActionPresented: Binding<Bool> {
+    Binding(
+      get: {
+        appState.plainTextActionItemID == item.id && item.isSelected
+      },
+      set: { isPresented in
+        if !isPresented, appState.plainTextActionItemID == item.id {
+          appState.dismissPlainTextAction()
+        }
+      }
+    )
+  }
+
   var body: some View {
     ListItemView(
       id: item.id,
@@ -99,6 +112,9 @@ struct HistoryItemView: View {
     }
     .accessibilityIdentifier("copy-history-item")
     .buttonAction(performSelect)
+    .popover(isPresented: plainTextActionPresented, arrowEdge: .leading) {
+      PlainTextActionView(item: item)
+    }
     .onAppear {
       item.ensureThumbnailImage()
     }
@@ -108,5 +124,39 @@ struct HistoryItemView: View {
     .accessibilityAction(named: Text("history_item_delete_action")) {
       appState.history.delete(item)
     }
+  }
+}
+
+/// A deliberately small, one-shot menu for the selected history row. It is
+/// opened with Left after keyboard navigation enters the list; Return invokes
+/// it, while clicking the button provides the same discoverable path.
+private struct PlainTextActionView: View {
+  let item: HistoryItemDecorator
+
+  @Environment(AppState.self) private var appState
+
+  var body: some View {
+    Button {
+      appState.paste(item, removeFormatting: true)
+    } label: {
+      HStack(spacing: 10) {
+        Image(systemName: "textformat")
+          .foregroundStyle(.secondary)
+          .frame(width: 16)
+
+        Text("paste_without_formatting_action")
+
+        Spacer(minLength: 12)
+
+        Text("↩")
+          .foregroundStyle(.secondary)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .keyboardShortcut(.return, modifiers: [])
+    .accessibilityHint(Text("paste_without_formatting_hint"))
+    .padding(10)
+    .frame(width: 230)
   }
 }

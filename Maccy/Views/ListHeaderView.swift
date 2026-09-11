@@ -43,6 +43,10 @@ struct ListHeaderView: View {
         // search term, and typing one is how a picker opened from the chevron or
         // Left arrow is dismissed by simply carrying on.
         .onChange(of: searchQuery) {
+          // Typing always returns the logical keyboard context to this row.
+          // The TextField remains first responder even during list navigation so
+          // printable keys can start a new search without a separate focus hop.
+          appState.focusSearchRow()
           appState.syncScopePicker(with: searchQuery)
         }
         // Only reliable way to disable the cursor. allowsHitTesting() does not work

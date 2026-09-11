@@ -129,6 +129,7 @@ struct HistoryListView: View {
         .onChange(of: scenePhase) {
           if scenePhase == .active {
             searchFocused = true
+            appState.focusSearchRow()
             appState.navigator.isKeyboardNavigating = true
             appState.navigator.select(item: appState.history.unpinnedItems.first ?? appState.history.pinnedItems.first)
             appState.preview.enableAutoOpen()
@@ -136,6 +137,7 @@ struct HistoryListView: View {
             appState.preview.startAutoOpen()
           } else {
             modifierFlags.flags = []
+            appState.focusSearchRow()
             appState.navigator.isKeyboardNavigating = true
             appState.preview.cancelAutoOpen()
           }

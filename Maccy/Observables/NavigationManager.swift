@@ -261,6 +261,13 @@ class NavigationManager { // swiftlint:disable:this type_body_length
   func highlightPrevious() {
     guard let lead = leadSelection else { return }
 
+    if leadSelection == history.pasteStack?.id {
+      if ForkStyle.isActive, let last = history.lastVisibleItem {
+        selectFromKeyboardNavigation(item: last)
+      }
+      return
+    }
+
     if let historyItem = history.firstVisibleItem(where: { $0.id == lead }) {
       if let nextItem = history.visibleItem(before: historyItem) {
         selectFromKeyboardNavigation(item: nextItem)
@@ -293,6 +300,15 @@ class NavigationManager { // swiftlint:disable:this type_body_length
     if let historyItem = history.firstVisibleItem(where: { $0.id == lead }) {
       if let nextItem = history.visibleItem(after: historyItem) {
         selectFromKeyboardNavigation(item: nextItem)
+      } else if ForkStyle.isActive {
+        // Tahoe presents history as a self-contained result list; footer actions
+        // are reached elsewhere. Match Up's edge behavior by wrapping Down from
+        // the last result to the visual first result (the paste stack, if any).
+        if history.pasteStack != nil {
+          selectFromKeyboardNavigation(item: nil)
+        } else {
+          highlightFirst()
+        }
       } else if let nextItem = footer.firstVisibleItem {
         selectFromKeyboardNavigation(footerItem: nextItem)
       } else if allowCycle {

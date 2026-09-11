@@ -12,6 +12,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
 
   override func setUp() {
     super.setUp()
+    AppState.shared.focusSearchRow()
     history.clearAll()
     Defaults[.size] = 10
     Defaults[.sortBy] = .firstCopiedAt
@@ -294,6 +295,96 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, older)
   }
 
+  func testPagedHistoryRemainsCompleteScrollableAndSearchable() async throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Paged history is enabled by the macOS 26 fork")
+    }
+
+    // Cross both paging boundaries (60-row first paint and 120-row remainder)
+    // so this exercises the same storage path as a real, scrollable history.
+    Defaults[.size] = 250
+    let total = 181
+    for index in 0..<total {
+      let title = index == 0 ? "unique-deep-history-entry" : "paged-history-\(index)"
+      let item = historyItem(title)
+      let timestamp = Date(timeIntervalSince1970: TimeInterval(index + 1))
+      item.firstCopiedAt = timestamp
+      item.lastCopiedAt = timestamp
+    }
+    Storage.shared.context.processPendingChanges()
+    try Storage.shared.context.save()
+
+    // Model a relaunch: nothing is kept in the in-memory arrays, but the SwiftData
+    // store is intact. load() must rebuild every page without dropping the tail.
+    history.all = []
+    history.items = []
+    try await history.load()
+    await waitUntil { self.history.all.count == total }
+
+    XCTAssertEqual(history.all.count, total)
+    XCTAssertEqual(history.items.count, total)
+    XCTAssertEqual(history.all.first?.title, "paged-history-180")
+    XCTAssertEqual(history.all.last?.title, "unique-deep-history-entry")
+    try assertStorageCounts(items: total, contents: total)
+
+    guard let last = history.lastVisibleItem else {
+      return XCTFail("Expected the oldest loaded history row")
+    }
+    AppState.shared.navigator.select(item: last)
+    XCTAssertEqual(AppState.shared.navigator.scrollTarget, last.id)
+
+    history.searchQuery = "unique-deep-history-entry"
+    await waitUntil {
+      self.history.items.count == 1
+        && self.history.items.first?.title == "unique-deep-history-entry"
+    }
+    XCTAssertEqual(history.items.first?.item, last.item)
+
+    history.searchQuery = ""
+    await waitUntil { self.history.items.count == total }
+  }
+
+  func testForkHistoryNavigationWrapsAtBothEnds() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Cyclic history navigation is enabled by the macOS 26 fork")
+    }
+
+    history.add(historyItem("oldest"))
+    history.add(historyItem("middle"))
+    history.add(historyItem("newest"))
+
+    guard let first = history.firstVisibleItem,
+          let last = history.lastVisibleItem else {
+      return XCTFail("Expected populated history")
+    }
+
+    AppState.shared.navigator.select(item: first)
+    AppState.shared.navigator.highlightPrevious()
+    XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, last)
+
+    AppState.shared.navigator.highlightNext()
+    XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, first)
+  }
+
+  func testPlainTextActionOnlyOpensFromHistoryKeyboardContext() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Contextual Left-arrow actions are enabled by the macOS 26 fork")
+    }
+
+    let item = history.add(historyItem("plain text action"))
+    AppState.shared.navigator.select(item: item)
+
+    AppState.shared.focusSearchRow()
+    AppState.shared.openPlainTextAction()
+    XCTAssertNil(AppState.shared.plainTextActionItemID)
+
+    AppState.shared.focusHistoryRow()
+    AppState.shared.openPlainTextAction()
+    XCTAssertEqual(AppState.shared.plainTextActionItemID, item.id)
+    XCTAssertTrue(AppState.shared.dismissPlainTextAction())
+    XCTAssertNil(AppState.shared.plainTextActionItemID)
+  }
+
   func testReaddingBottomMostPinnedItemAtFullCapacity() {
     // Regression test for a crash when re-copying (invoking) the bottom-most
     // pinned item while history is at full capacity and pins are sorted to the
@@ -378,6 +469,17 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
       file: file,
       line: line
     )
+  }
+
+  private func waitUntil(
+    _ condition: @escaping @MainActor () -> Bool,
+    attempts: Int = 250
+  ) async {
+    for _ in 0..<attempts {
+      if condition() { return }
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+    XCTFail("Timed out waiting for asynchronous history update")
   }
 
   private func historyItem(_ value: String, persisted: Bool = true) -> HistoryItem {

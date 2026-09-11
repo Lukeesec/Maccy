@@ -218,8 +218,8 @@ enum KeyChord: CaseIterable {
       self = .pinOrUnpin
     case (.comma, [.command]):
       self = .openPreferences
-    // Command+C, Ctrl+C and Option+C all mirror Enter: copy the highlighted item
-    // and close. See isCopyShortcut for why all three. These must stay above the
+    // Command+C, Ctrl+C and Option+C copy the highlighted item and close without
+    // pasting. See isCopyShortcut for why all three. These must stay above the
     // modifier catch-all further down, which would otherwise classify them as
     // .ignored and pass them to the search field -- where Option+C in particular
     // would insert a "ç" rather than doing nothing. They also sit above the

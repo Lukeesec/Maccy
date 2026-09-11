@@ -199,7 +199,18 @@ class Popup {
     // the event either way. Returning nil swallows it so nothing types a "ç".
     if ForkStyle.isActive, !isClosed(), KeyChord.isCopyShortcut(event) {
       Task { @MainActor in
-        AppState.shared.select(flags: [])
+        AppState.shared.copySelection()
+      }
+      return nil
+    }
+
+    // A transient row action owns the first Escape even if its popover moved
+    // first responder outside the root SwiftUI view. The next Escape can then
+    // leave an open preview or close the popup in the usual order.
+    if ForkStyle.isActive, !isClosed(), KeyChord.isEscape(event),
+       AppState.shared.plainTextActionItemID != nil {
+      Task { @MainActor in
+        AppState.shared.dismissPlainTextAction()
       }
       return nil
     }
