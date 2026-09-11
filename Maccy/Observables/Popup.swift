@@ -113,7 +113,7 @@ class Popup {
     guard eventsMonitor == nil else { return }
 
     self.eventsMonitor = NSEvent.addLocalMonitorForEvents(
-      matching: [.flagsChanged, .keyDown],
+      matching: [.flagsChanged, .keyDown, .leftMouseDown],
       handler: handleEvent
     )
   }
@@ -185,9 +185,48 @@ class Popup {
       return handleKeyDown(event)
     case .flagsChanged:
       return handleFlagsChanged(event)
+    case .leftMouseDown:
+      return handleMouseDown(event)
     default:
       return event
     }
+  }
+
+  private func handleMouseDown(_ event: NSEvent) -> NSEvent? {
+    guard ForkStyle.isActive, !isClosed(),
+          let panel = AppState.shared.appDelegate?.panel,
+          event.window === panel,
+          let contentView = panel.contentView else {
+      return event
+    }
+
+    // SwiftUI keeps the search TextField as the AppKit first responder during
+    // keyboard list navigation so printable input can immediately start a new
+    // query. Consequently, clicking the already-focused field emits no focus
+    // change to observe. Detect a click in the measured search header before it
+    // reaches the field and align the logical/painted selection with that row.
+    let point = contentView.convert(event.locationInWindow, from: nil)
+    let measuredHeaderHeight = max(headerHeight, Popup.searchFieldHeight + Popup.verticalPadding)
+    let inHeader = contentView.isFlipped
+      ? point.y <= contentView.bounds.minY + measuredHeaderHeight
+      : point.y >= contentView.bounds.maxY - measuredHeaderHeight
+
+    let contentMinX: CGFloat
+    switch AppState.shared.preview.placement {
+    case .left where AppState.shared.preview.state.isOpen:
+      contentMinX = AppState.shared.preview.slideoutWidth
+    default:
+      contentMinX = contentView.bounds.minX
+    }
+    let contentMaxX = contentMinX + AppState.shared.preview.contentWidth
+
+    if inHeader,
+       point.x >= contentMinX,
+       point.x <= contentMaxX {
+      AppState.shared.focusSearchRow()
+    }
+
+    return event
   }
 
   private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
