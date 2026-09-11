@@ -92,6 +92,12 @@ class AppState: Sendable {
   func focusSearchRow() {
     historyNavigationActive = false
     plainTextActionItemID = nil
+    if ForkStyle.isActive {
+      // Logical focus and painted selection must agree. Leaving the first
+      // history row selected here made the first Down look broken: it changed
+      // context, but highlighted the row that was already highlighted.
+      navigator.select()
+    }
   }
 
   func focusHistoryRow() {

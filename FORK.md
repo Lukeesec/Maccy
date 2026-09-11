@@ -111,6 +111,9 @@ The previous application is similarly moved to
 
 ## Key map on macOS 26
 
+The popup opens on the search row with no history result preselected. Down
+enters at the first result; Up enters at the last.
+
 | Key | Action |
 |---|---|
 | <kbd>←</kbd> | Leave the editor; search row: scopes/settings; history row: Copy & paste without formatting |

@@ -375,14 +375,41 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     AppState.shared.navigator.select(item: item)
 
     AppState.shared.focusSearchRow()
+    XCTAssertNil(AppState.shared.navigator.leadHistoryItem)
     AppState.shared.openPlainTextAction()
     XCTAssertNil(AppState.shared.plainTextActionItemID)
 
     AppState.shared.focusHistoryRow()
+    AppState.shared.navigator.highlightNext()
+    XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, item)
     AppState.shared.openPlainTextAction()
     XCTAssertEqual(AppState.shared.plainTextActionItemID, item.id)
     XCTAssertTrue(AppState.shared.dismissPlainTextAction())
     XCTAssertNil(AppState.shared.plainTextActionItemID)
+  }
+
+  func testForkSearchRowEntersHistoryAtVisibleEdges() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Search-row navigation is enabled by the macOS 26 fork")
+    }
+
+    history.add(historyItem("oldest"))
+    history.add(historyItem("middle"))
+    history.add(historyItem("newest"))
+    let first = try XCTUnwrap(history.firstVisibleItem)
+    let last = try XCTUnwrap(history.lastVisibleItem)
+
+    AppState.shared.focusSearchRow()
+    XCTAssertNil(AppState.shared.navigator.leadHistoryItem)
+
+    AppState.shared.focusHistoryRow()
+    AppState.shared.navigator.highlightNext()
+    XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, first)
+
+    AppState.shared.focusSearchRow()
+    AppState.shared.focusHistoryRow()
+    AppState.shared.navigator.highlightPrevious()
+    XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, last)
   }
 
   func testReaddingBottomMostPinnedItemAtFullCapacity() {

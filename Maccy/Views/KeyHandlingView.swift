@@ -148,7 +148,7 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
 
           if ForkStyle.isActive, !appState.historyNavigationActive {
             // The field is the initial logical row. The first Down enters the
-            // result list without skipping the already-highlighted first item.
+            // result list at its first item.
             appState.focusHistoryRow()
             appState.navigator.highlightFirst()
           } else {
@@ -269,12 +269,13 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           return .handled
         case .arrowRight:
           // Right arrow opens the editable preview and puts focus in it. The
-          // caret wins whenever there is a query to move through, and the
-          // preview keeps the key once it has focus.
+          // preview keeps the key once it has focus. Search context has no lead
+          // result, while Down into history supplies one even for filtered
+          // results, so the selection itself is the authority here.
           if appState.dismissPlainTextAction() {
             return .handled
           }
-          guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen,
+          guard ForkStyle.isActive, !appState.scopePickerOpen,
                 !PreviewEditor.shared.isFocused else {
             return .ignored
           }
@@ -308,12 +309,16 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
             appState.actionsMenuOpen = false
             return .handled
           }
-          guard ForkStyle.isActive, searchQuery.isEmpty, !appState.scopePickerOpen else {
+          guard ForkStyle.isActive, !appState.scopePickerOpen else {
             return .ignored
           }
           if appState.historyNavigationActive {
             appState.openPlainTextAction()
           } else {
+            // While the field owns logical focus, Left is still a caret key for
+            // a non-empty query. The scope/settings picker is its empty-row
+            // action, not an interruption while editing text.
+            guard searchQuery.isEmpty else { return .ignored }
             appState.openScopePicker()
           }
           return .handled

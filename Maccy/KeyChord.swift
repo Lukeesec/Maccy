@@ -235,10 +235,9 @@ enum KeyChord: CaseIterable {
       self = .focusActions
     case (.tab, [.shift]):
       self = .unfocusActions
-    // The arrows are ambiguous by themselves: they belong to the caret whenever
-    // there is a query to move through, and only mean "open the preview" or
-    // "open the scope picker" on an empty one. Classify them plainly here and
-    // let the handler, which can see the query, decide.
+    // The arrows are contextual: while editing a query Left remains a caret key,
+    // while history navigation uses Left for the plain-text action and Right for
+    // preview. Classify them plainly here and let the handler decide from state.
     case (.rightArrow, []):
       self = .arrowRight
     case (.leftArrow, []):

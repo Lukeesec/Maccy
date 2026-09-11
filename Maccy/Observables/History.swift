@@ -366,7 +366,11 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
 
     guard resetSelection else { return }
 
-    if searchQuery.isEmpty {
+    if ForkStyle.isActive, !AppState.shared.historyNavigationActive {
+      // Typing puts keyboard focus back on the search row. Keep the visible
+      // selection in sync rather than painting a result as selected too.
+      AppState.shared.navigator.select()
+    } else if searchQuery.isEmpty {
       AppState.shared.navigator.select(item: unpinnedItems.first)
     } else {
       AppState.shared.navigator.highlightFirst()

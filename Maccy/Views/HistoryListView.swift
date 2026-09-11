@@ -131,7 +131,11 @@ struct HistoryListView: View {
             searchFocused = true
             appState.focusSearchRow()
             appState.navigator.isKeyboardNavigating = true
-            appState.navigator.select(item: appState.history.unpinnedItems.first ?? appState.history.pinnedItems.first)
+            if !ForkStyle.isActive {
+              appState.navigator.select(
+                item: appState.history.unpinnedItems.first ?? appState.history.pinnedItems.first
+              )
+            }
             appState.preview.enableAutoOpen()
             appState.preview.resetAutoOpenSuppression()
             appState.preview.startAutoOpen()

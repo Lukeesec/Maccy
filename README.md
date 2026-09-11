@@ -58,6 +58,9 @@ Maccy's built-in updater follows upstream and does not install this fork.
 
 ## Essential keys on macOS 26
 
+The popup opens on the search row with no history result preselected. Down
+enters at the first result; Up enters at the last.
+
 | Key | Action |
 |---|---|
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move through history or the open scope picker; history wraps at both ends |

@@ -259,7 +259,14 @@ class NavigationManager { // swiftlint:disable:this type_body_length
   }
 
   func highlightPrevious() {
-    guard let lead = leadSelection else { return }
+    guard let lead = leadSelection else {
+      // Search is the visual row above history in the fork. Up from there wraps
+      // directly to the last result, just as Down enters at the first result.
+      if ForkStyle.isActive, let last = history.lastVisibleItem {
+        selectFromKeyboardNavigation(item: last)
+      }
+      return
+    }
 
     if leadSelection == history.pasteStack?.id {
       if ForkStyle.isActive, let last = history.lastVisibleItem {
@@ -290,7 +297,12 @@ class NavigationManager { // swiftlint:disable:this type_body_length
   }
 
   func highlightNext(allowCycle: Bool = false) {
-    guard let lead = leadSelection else { return }
+    guard let lead = leadSelection else {
+      if ForkStyle.isActive {
+        highlightFirst()
+      }
+      return
+    }
 
     if leadSelection == history.pasteStack?.id {
       highlightFirst()
@@ -327,10 +339,15 @@ class NavigationManager { // swiftlint:disable:this type_body_length
   }
 
   func highlightLast() {
-    guard let lead = leadSelection else { return }
+    guard let lead = leadSelection else {
+      if ForkStyle.isActive, let last = history.lastVisibleItem {
+        selectFromKeyboardNavigation(item: last)
+      }
+      return
+    }
 
     if let historyItem = history.firstVisibleItem(where: { $0.id == lead }) {
-      if historyItem == history.lastVisibleItem,
+      if !ForkStyle.isActive, historyItem == history.lastVisibleItem,
          let nextItem = footer.firstVisibleItem {
         selectFromKeyboardNavigation(footerItem: nextItem)
       } else {
