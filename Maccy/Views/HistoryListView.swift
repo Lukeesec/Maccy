@@ -127,11 +127,9 @@ struct HistoryListView: View {
           }
         }
         .onChange(of: scenePhase) {
-          NSLog("MaccySelection HistoryList scenePhase %@", String(describing: scenePhase))
           if scenePhase == .active {
             searchFocused = true
             appState.navigator.isKeyboardNavigating = true
-            NSLog("MaccySelection HistoryList selecting first on active")
             appState.navigator.select(item: appState.history.unpinnedItems.first ?? appState.history.pinnedItems.first)
             appState.preview.enableAutoOpen()
             appState.preview.resetAutoOpenSuppression()

@@ -277,6 +277,23 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertFalse(history.items.contains(items[5]))
   }
 
+  func testReassigningSameSearchQueryKeepsSelection() async throws {
+    // Normalize any query left by another test and let its real refresh finish.
+    history.searchQuery = ""
+    try await Task.sleep(for: .milliseconds(250))
+
+    let older = history.add(historyItem("older"))
+    history.add(historyItem("newer"))
+    AppState.shared.navigator.select(item: older)
+
+    // SwiftUI writes this unchanged value when focus leaves the search field for
+    // the AppKit preview editor. It must not be mistaken for a new search.
+    history.searchQuery = history.searchQuery
+    try await Task.sleep(for: .milliseconds(250))
+
+    XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, older)
+  }
+
   func testReaddingBottomMostPinnedItemAtFullCapacity() {
     // Regression test for a crash when re-copying (invoking) the bottom-most
     // pinned item while history is at full capacity and pins are sorted to the

@@ -21,6 +21,12 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
 
   var searchQuery: String = "" {
     didSet {
+      // SwiftUI can write the field's current value back through its binding when
+      // focus moves to the AppKit preview editor. Treat that as a focus event, not
+      // a new search: refreshing with resetSelection would otherwise jump to the
+      // first result just as the editor takes focus.
+      guard oldValue != searchQuery else { return }
+
       throttler.throttle { [self] in
         Task { @MainActor in
           refreshItems(resetSelection: true)
@@ -356,11 +362,6 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
   /// The single place `items` is recomputed from `all`, the scope and the query.
   @MainActor
   private func refreshItems(resetSelection: Bool) {
-    NSLog(
-      "MaccySelection refreshItems reset=%@ queryEmpty=%@",
-      resetSelection.description,
-      searchQuery.isEmpty.description
-    )
     updateItems(search.search(string: searchQuery, within: searchCandidates()))
 
     guard resetSelection else { return }
