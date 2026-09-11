@@ -21,10 +21,9 @@ struct SearchFieldView: View {
   /// that opens the picker, and, once a scope is committed, a chip in front of
   /// the query text that the caret types after and Backspace deletes.
   ///
-  /// The picker itself is not drawn here. It used to hang off this row as a
-  /// `.topLeading` overlay, which put it straight over the results; it is now
-  /// docked in the header below the row, where it has space of its own. See
-  /// `HeaderView` and `ScopePickerView`.
+  /// The picker itself is a native popover attached to the chevron. That gives it
+  /// a window outside the panel, matching the selected history row's plain-text
+  /// action instead of moving or covering the results.
   private var heroField: some View {
     HStack(spacing: Popup.searchIconSpacing) {
       HStack(spacing: 6) {

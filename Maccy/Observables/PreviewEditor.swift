@@ -30,8 +30,8 @@ final class PreviewEditor {
   /// the pane is an `NSTextView`, and resigning it leaves the window itself as
   /// first responder with SwiftUI's `@FocusState` none the wiser, at which point
   /// no key in the popup works at all. Every path that clears the flag -- Escape,
-  /// Left arrow, the selection moving, the popup closing -- goes through here, so
-  /// this is the one place that has to ask.
+  /// a mouse-driven focus or selection change, or the popup closing -- goes
+  /// through here, so this is the one place that has to ask.
   var isFocused: Bool = false {
     didSet {
       guard oldValue, !isFocused else { return }

@@ -170,10 +170,8 @@ class AppState: Sendable {
 
   @MainActor
   func openScopePicker(asCommand: Bool = false) {
-    // The picker is docked under the search row. With the row hidden (showSearch
-    // off, or searchVisibility == .duringSearch on an empty query) it would open
-    // with nothing above it and still swallow Up/Down/Return/Escape, silently
-    // filtering the list with no visible cause.
+    // The popover is anchored to the search row's chevron. With that row hidden
+    // it would have no valid visual source while still swallowing menu keys.
     guard ForkStyle.isActive, searchVisible, !scopePickerOpen else { return }
 
     scopePickerIsCommand = asCommand
@@ -182,12 +180,6 @@ class AppState: Sendable {
     // at its first match immediately afterwards.
     scopePickerSelection = .scope(scope)
     scopePickerOpen = true
-    // The picker takes real space in the header, so ask the panel for it. On a
-    // panel that is already at its full height this changes nothing and the list
-    // simply moves down; on a short one it grows instead of squeezing the
-    // results away.
-    popup.scopePickerHeight = ScopePickerView.reservedHeight
-    popup.needsResize = true
   }
 
   func closeScopePicker() {
@@ -196,8 +188,6 @@ class AppState: Sendable {
     guard scopePickerOpen else { return }
 
     scopePickerOpen = false
-    popup.scopePickerHeight = 0
-    popup.needsResize = true
   }
 
   /// Back out of the preview: drop its focus, take the scope picker down with it,

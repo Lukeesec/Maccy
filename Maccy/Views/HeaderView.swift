@@ -1,5 +1,3 @@
-import AppKit
-import Defaults
 import SwiftUI
 
 struct HeaderView: View {
@@ -7,8 +5,6 @@ struct HeaderView: View {
 
   let controller: SlideoutController
   @FocusState.Binding var searchFocused: Bool
-
-  @Environment(\.accessibilityReduceMotion) private var reduceMotionEnvironment
 
   var previewPlacement: SlideoutPlacement {
     return controller.placement
@@ -19,52 +15,11 @@ struct HeaderView: View {
     ForkStyle.isActive && ForkStyle.actions == .searchRow
   }
 
-  /// The panel is hosted in an NSPanel rather than a scene, so read the
-  /// workspace flag as well as the environment value and take either. Same
-  /// reasoning as `ContentView`.
-  private var reduceMotion: Bool {
-    reduceMotionEnvironment || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-  }
-
-  /// The gutter opening is chrome appearing on a keystroke, so it matches the
-  /// panel's own entrance: critically damped, arrives and stops. Bounce belongs
-  /// to gesture-driven motion.
-  private var dockAnimation: Animation {
-    reduceMotion
-      ? .easeOut(duration: 0.1)
-      : .spring(response: 0.20, dampingFraction: 1.0)
-  }
-
-  private var scopePickerDocked: Bool {
-    ForkStyle.isActive && appState.scopePickerOpen && appState.searchVisible
-  }
-
   var body: some View {
-    // The picker is docked *under* the search row rather than drawn over the
-    // list. It is a sibling of the row inside the header, so it takes real
-    // layout space: the results move down by exactly its height and stay
-    // visible. `Popup.scopePickerHeight` carries the same number into the
-    // panel's height arithmetic, so a short panel grows to make room rather
-    // than squeezing the list out -- and `readHeight` stays on the search row
-    // alone so the picker is never counted twice.
-    VStack(alignment: .leading, spacing: 0) {
-      searchRow
-        .readHeight(appState, into: \.popup.headerHeight)
-
-      if scopePickerDocked {
-        ScopePickerView()
-          // Lines the picker up under the chevron: the search row is inset by
-          // the header's padding and again by ListHeaderView's own.
-          .padding(.leading, Popup.horizontalPadding * 2)
-          .padding(.trailing, Popup.horizontalPadding)
-          .padding(.top, ScopePickerView.topGap)
-          .transition(.opacity)
-      }
-    }
-    .animation(dockAnimation, value: scopePickerDocked)
-    // Belt and braces: the picker no longer overlaps the list, but it is still
-    // the header's business to sit above it if anything ever does.
-    .zIndex(1)
+    // The scope/settings picker is a native popover owned by the chevron inside
+    // SearchFieldView. Only the stable search row participates in panel layout.
+    searchRow
+      .readHeight(appState, into: \.popup.headerHeight)
   }
 
   private var searchRow: some View {

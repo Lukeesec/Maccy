@@ -295,6 +295,43 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertEqual(AppState.shared.navigator.leadHistoryItem, older)
   }
 
+  func testPreviewLeftArrowMovesCaretWithoutLeavingEditor() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Editable preview is enabled by the macOS 26 fork")
+    }
+
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 320, height: 120),
+      styleMask: .borderless,
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    let textView = PreviewTextView(frame: window.contentView?.bounds ?? .zero)
+    textView.string = "abc"
+    window.contentView = textView
+    XCTAssertTrue(window.makeFirstResponder(textView))
+    textView.setSelectedRange(NSRange(location: 2, length: 0))
+
+    let event = try XCTUnwrap(NSEvent.keyEvent(
+      with: .keyDown,
+      location: .zero,
+      modifierFlags: [],
+      timestamp: 0,
+      windowNumber: window.windowNumber,
+      context: nil,
+      characters: "\u{f702}",
+      charactersIgnoringModifiers: "\u{f702}",
+      isARepeat: false,
+      keyCode: 123
+    ))
+    textView.keyDown(with: event)
+
+    XCTAssertEqual(textView.selectedRange(), NSRange(location: 1, length: 0))
+    XCTAssertTrue(window.firstResponder === textView)
+  }
+
   func testPagedHistoryRemainsCompleteScrollableAndSearchable() async throws {
     guard ForkStyle.isActive else {
       throw XCTSkip("Paged history is enabled by the macOS 26 fork")

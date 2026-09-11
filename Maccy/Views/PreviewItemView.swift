@@ -359,8 +359,9 @@ struct EditablePreviewTextView: NSViewRepresentable {
 }
 
 /// An `NSTextView` that reports first-responder changes and refuses to swallow the
-/// popup's own keys. Return pastes, Escape closes, Tab moves focus — none of them
-/// belong to the field. Shift-Return is left alone so a newline is still typable.
+/// popup's own keys. Return pastes, Escape closes, and Tab moves focus. Every
+/// arrow-key variant stays in the editor for caret movement, selection and
+/// scrolling; the user leaves editing with Escape or the mouse.
 final class PreviewTextView: NSTextView {
   var onFocusChange: (@MainActor (Bool) -> Void)?
 
@@ -371,8 +372,7 @@ final class PreviewTextView: NSTextView {
     36,  // Return
     76,  // Enter (keypad)
     48,  // Tab
-    53,  // Escape
-    123  // Left arrow — the documented way back out to the list
+    53   // Escape
   ]
 
   override func becomeFirstResponder() -> Bool {
@@ -434,7 +434,8 @@ final class PreviewTextView: NSTextView {
     let commandish = event.modifierFlags
       .intersection(.deviceIndependentFlagsMask)
       .intersection([.command, .control, .option])
-    if !commandish.isEmpty {
+    let isArrow = [123, 124, 125, 126].contains(event.keyCode)
+    if !commandish.isEmpty, !isArrow {
       nextResponder?.keyDown(with: event)
       return
     }

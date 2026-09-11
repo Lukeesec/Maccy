@@ -12,10 +12,10 @@ On macOS 26, this branch adds:
 
 - A Spotlight-style, appearance-aware popup with taller rows, softer selection,
   revised typography and icons, and configurable grouping and chrome.
-- A docked scope picker for All, Text, Links, Images, and Files. Left arrow opens
-  it from the focused search row; `/text`, `/links`, `/images`, and `/files` work
-  as command-style filters. After Down enters history, Left instead opens a
-  one-shot Copy & paste without formatting action for that row.
+- An external scope/settings popover for All, Text, Links, Images, and Files.
+  Left arrow opens it from the focused search row; `/text`, `/links`, `/images`,
+  and `/files` work as command-style filters. After Down enters history, Left
+  instead opens a one-shot Copy & paste without formatting action for that row.
 - An editable scratch preview for text items. Copy or paste uses the draft while
   leaving the stored history item unchanged.
 - <kbd>⌘C</kbd>, <kbd>⌃C</kbd>, and <kbd>⌥C</kbd> as copy-and-close shortcuts,
@@ -116,7 +116,7 @@ enters at the first result; Up enters at the last.
 
 | Key | Action |
 |---|---|
-| <kbd>←</kbd> | Leave the editor; search row: scopes/settings; history row: Copy & paste without formatting |
+| <kbd>←</kbd> | Editor: move the caret; search row: external scopes/settings; history row: Copy & paste without formatting |
 | <kbd>/</kbd> | Type a scope command; Return commits a matching scope |
 | <kbd>→</kbd> | Open the selected text item's editable preview |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move through results (wrapping at both ends) or through the open picker |
@@ -130,7 +130,8 @@ enters at the first result; Up enters at the last.
 
 A preview edit is a scratch draft. It is discarded when selection changes or the
 popup closes. Copying the draft creates a new clipboard event but never rewrites
-the original stored item.
+the original stored item. All arrow keys stay in the editor; leave with Escape or
+the mouse.
 
 ## Design switches
 

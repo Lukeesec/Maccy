@@ -64,8 +64,8 @@ enters at the first result; Up enters at the last.
 | Key | Action |
 |---|---|
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move through history or the open scope picker; history wraps at both ends |
-| <kbd>←</kbd> | Search row: open scopes/settings; history row: open Copy & paste without formatting |
-| <kbd>/</kbd> | Type a scope command such as `/links` |
+| <kbd>←</kbd> | Search row: open scopes/settings outside the panel; history row: open Copy & paste without formatting |
+| <kbd>/</kbd> | Type a scope command such as `/links` and open its picker outside the panel |
 | <kbd>→</kbd> | Open the selected text item's editable preview |
 | <kbd>↩</kbd> | Copy, paste at the cursor, and close; from the preview, paste the draft |
 | <kbd>⌥↩</kbd> | Run the configured alternate action (see Settings) |
@@ -74,6 +74,8 @@ enters at the first result; Up enters at the last.
 
 Preview edits are scratch copies. They never rewrite the stored history item;
 copying an edited draft creates a new clipboard-history entry.
+While editing, all arrow keys remain inside the editor. Use Escape or the mouse
+to leave it.
 
 ## Data and reverting
 

@@ -160,6 +160,9 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           guard NSApp.characterPickerWindow == nil else {
             return .ignored
           }
+          guard !previewHoldsKeys() else {
+            return .ignored
+          }
 
           appState.focusHistoryRow()
           appState.navigator.highlightLast()
@@ -181,12 +184,18 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           guard NSApp.characterPickerWindow == nil else {
             return .ignored
           }
+          guard !previewHoldsKeys() else {
+            return .ignored
+          }
 
           appState.focusHistoryRow()
           appState.navigator.highlightFirst()
           return .handled
         case .extendToNext:
           guard NSApp.characterPickerWindow == nil else {
+            return .ignored
+          }
+          guard !previewHoldsKeys() else {
             return .ignored
           }
           guard AppState.shared.multiSelectionEnabled else {
@@ -198,6 +207,9 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           guard NSApp.characterPickerWindow == nil else {
             return .ignored
           }
+          guard !previewHoldsKeys() else {
+            return .ignored
+          }
           guard AppState.shared.multiSelectionEnabled else {
             return .ignored
           }
@@ -207,6 +219,9 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           guard NSApp.characterPickerWindow == nil else {
             return .ignored
           }
+          guard !previewHoldsKeys() else {
+            return .ignored
+          }
           guard AppState.shared.multiSelectionEnabled else {
             return .ignored
           }
@@ -214,6 +229,9 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           return .handled
         case .extendToFirst:
           guard NSApp.characterPickerWindow == nil else {
+            return .ignored
+          }
+          guard !previewHoldsKeys() else {
             return .ignored
           }
           guard AppState.shared.multiSelectionEnabled else {
@@ -293,16 +311,11 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           PreviewEditor.shared.isFocused = true
           return .handled
         case .arrowLeft:
-          // Left arrow walks back out of whatever the right arrow walked into,
-          // and only opens the scope picker once there is nothing left to leave.
-          // The draft is deliberately left alone: leaving the preview is not
-          // discarding the edit.
+          // Once editing starts, every arrow belongs to the text view. Escape or
+          // a mouse click is the explicit way out; a caret at column zero must
+          // not silently change modes.
           if PreviewEditor.shared.isFocused {
-            // Not leavePreview(): Left arrow steps out of the *editor* and leaves
-            // the pane showing. Clearing the flag is what asks for the keyboard
-            // back -- see PreviewEditor.isFocused.
-            PreviewEditor.shared.isFocused = false
-            return .handled
+            return .ignored
           }
           if appState.actionsFocused {
             appState.actionsFocused = false

@@ -5,8 +5,8 @@ import SwiftUI
 // Scope token in the search field.
 //
 // Spotlight narrows its results with a token typed into the field itself
-// ("/pdf"), rather than with a dropdown menu or a rail of filters, and the token
-// stays visible in the field as a chip once committed. This is that pattern:
+// ("/pdf"), and the token stays visible in the field as a chip once committed.
+// The compact external chooser makes those tokens and Settings discoverable:
 //
 //   * a dim chevron at the left of the search row teaches the gesture,
 //   * Left arrow on an empty query opens the picker,
@@ -17,9 +17,9 @@ import SwiftUI
 //     a chip in front of the query,
 //   * Backspace on an empty query removes the chip again.
 //
-// The picker is *docked* under the search row rather than floating over the
-// list: it is part of the header's layout, so the results move down instead of
-// being covered. See ScopePickerView.reservedHeight.
+// The picker is a native popover anchored to the chevron. Like the per-history
+// plain-text action, it lives outside the panel instead of moving or covering
+// the results inside it.
 //
 // Everything here is macOS 26 only. On 14/15 the chevron is never drawn and the
 // key handlers all return .ignored, so the field behaves exactly as upstream's.
@@ -133,6 +133,17 @@ struct ScopeIndicatorView: View {
   private var glyphSize: CGFloat { max(9, Popup.searchIconSize - 8) }
   private var boxSize: CGFloat { glyphSize + 8 }
 
+  private var pickerPresented: Binding<Bool> {
+    Binding(
+      get: { appState.scopePickerOpen },
+      set: { presented in
+        if !presented, appState.scopePickerOpen {
+          appState.dismissScopePicker()
+        }
+      }
+    )
+  }
+
   var body: some View {
     Image(systemName: "chevron.left")
       .font(.system(size: glyphSize, weight: .semibold))
@@ -147,6 +158,9 @@ struct ScopeIndicatorView: View {
       .contentShape(Rectangle())
       .onTapGesture {
         appState.toggleScopePicker()
+      }
+      .popover(isPresented: pickerPresented, arrowEdge: .leading) {
+        ScopePickerView()
       }
       .animation(.easeInOut(duration: 0.12), value: isOpen)
       .accessibilityLabel(Text("scope_picker_accessibility_label"))
@@ -181,15 +195,8 @@ struct ScopeChipView: View {
   }
 }
 
-/// The picker itself, docked in its own gutter under the left of the search row.
-///
-/// It used to be a `.topLeading` overlay on the search row, which drew it *over*
-/// the results -- the panel is a fixed-width NSPanel and cannot put a flyout
-/// outside its own bounds, so "beside the list" was never available. Docking it
-/// into the header's layout instead gives it real space: the list moves down by
-/// exactly this much and stays entirely visible, and `Popup.scopePickerHeight`
-/// asks the panel for the extra height so a short panel grows rather than
-/// squeezing the results out.
+/// The picker itself. Its native popover container supplies the external window,
+/// background, arrow and shadow; this view only supplies the compact menu rows.
 struct ScopePickerView: View {
   @Environment(AppState.self) private var appState
 
@@ -198,36 +205,7 @@ struct ScopePickerView: View {
   private static let tokenWidth: CGFloat = 52
   private static let rowHeight: CGFloat = 26
   private static let rowSpacing: CGFloat = 1
-  /// A `Divider` plus the padding it carries above and below.
-  private static let dividerHeight: CGFloat = 9
   private static let containerPadding: CGFloat = 6
-  private static let cornerRadius: CGFloat = 12
-
-  /// Gap between the search row and the docked picker.
-  static let topGap: CGFloat = 6
-
-  private static func panelHeight(rowCount: Int, hasSettings: Bool) -> CGFloat {
-    guard rowCount > 0 else { return 0 }
-
-    // The divider is an element of the stack like any row, so it brings a gap of
-    // its own with it.
-    let hasDivider = hasSettings && rowCount > 1
-    let gaps = CGFloat(rowCount - 1 + (hasDivider ? 1 : 0)) * rowSpacing
-    return CGFloat(rowCount) * rowHeight
-      + gaps
-      + (hasDivider ? dividerHeight : 0)
-      + containerPadding * 2
-  }
-
-  /// Vertical space the docked picker claims in the header while it is open,
-  /// gap included.
-  ///
-  /// Deliberately the height of the *whole* list rather than of the filtered
-  /// rows: narrowing "/l" to a single row must not resize the panel under the
-  /// typing. The picker shrinks, the gutter does not, and the extra room simply
-  /// goes back to the results.
-  static let reservedHeight: CGFloat = topGap
-    + panelHeight(rowCount: ScopePickerRow.ordered.count, hasSettings: true)
 
   private var rows: [ScopePickerRow] { appState.scopePickerRows }
 
@@ -243,24 +221,6 @@ struct ScopePickerView: View {
     }
     .padding(Self.containerPadding)
     .frame(width: Self.width, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-        .fill(Color(nsColor: .windowBackgroundColor))
-        // Docked or not, the picker needs to read as its own surface, so it sits
-        // a little lighter than the panel rather than disappearing into it.
-        .overlay(
-          RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-            .fill(Color.primary.opacity(0.06))
-        )
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-    )
-    // Lighter than the dropdown's shadow was: this one sits in the panel's own
-    // layout rather than floating above the list, and a heavy shadow would
-    // claim otherwise.
-    .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
     .fixedSize()
     .accessibilityElement(children: .contain)
   }
