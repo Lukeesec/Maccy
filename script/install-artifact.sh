@@ -20,13 +20,13 @@ quit_maccy() {
   step "Quitting Maccy before reading or replacing its data"
   osascript -e 'tell application "Maccy" to quit' >/dev/null 2>&1 || true
   for _ in $(seq 1 20); do
-    pgrep -x Maccy >/dev/null 2>&1 || return
+    pgrep -x Maccy >/dev/null 2>&1 || return 0
     sleep 0.25
   done
 
   pkill -x Maccy >/dev/null 2>&1 || true
   for _ in $(seq 1 20); do
-    pgrep -x Maccy >/dev/null 2>&1 || return
+    pgrep -x Maccy >/dev/null 2>&1 || return 0
     sleep 0.25
   done
 
