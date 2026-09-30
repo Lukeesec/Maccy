@@ -177,7 +177,7 @@ class Storage {
           return lhs.index < rhs.index
         }
       }
-      return matches.map(\.id)
+      return matches.map { $0.id }
     }
 
     return []
