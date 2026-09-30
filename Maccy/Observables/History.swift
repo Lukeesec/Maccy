@@ -729,7 +729,8 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     // A rich copy can carry several pasteboard types. A later copy with only
     // one of those types may have a different preferred fingerprint, so use
     // its indexed title as a narrow fallback before checking the visible page.
-    if let candidates = try? Storage.shared.fetchDuplicateCandidates(title: item.title),
+    if !item.title.isEmpty,
+       let candidates = try? Storage.shared.fetchDuplicateCandidates(title: item.title),
        let duplicate = candidates.first(where: { $0 != item && $0.supersedes(item) }) {
       return duplicate
     }
