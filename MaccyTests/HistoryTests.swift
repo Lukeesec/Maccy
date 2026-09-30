@@ -427,7 +427,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
 
     // Keep more rows than the visible page and search for the oldest one.
     Defaults[.size] = 60
-    let total = 181
+    let total = 211
     for index in 0..<total {
       let title = index == 0 ? "unique-deep-history-entry" : "paged-history-\(index)"
       let item = historyItem(title)
@@ -444,7 +444,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     try await history.load()
     XCTAssertEqual(history.all.count, 60)
     XCTAssertEqual(history.items.count, 60)
-    XCTAssertEqual(history.all.first?.title, "paged-history-180")
+    XCTAssertEqual(history.all.first?.title, "paged-history-210")
     try assertStorageCounts(items: total, contents: total)
 
     history.showOlderPage()
@@ -453,7 +453,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertEqual(history.items.last?.title, "unique-deep-history-entry")
     history.showNewerPage()
     history.showNewerPage()
-    XCTAssertEqual(history.items.first?.title, "paged-history-120")
+    XCTAssertEqual(history.items.first?.title, "paged-history-150")
 
     history.searchQuery = "unique-deep-history-entry"
     await waitUntil {
@@ -501,6 +501,27 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertEqual(recopy.item.numberOfCopies, 2)
     XCTAssertEqual(recopy.item.title, "deep-0")
     try assertStorageCounts(items: 12, contents: 12)
+  }
+
+  func testRecopyOfSubsetOfOffPageRichItemMergesStoredHistory() throws {
+    Defaults[.size] = 2
+    let rich = HistoryItem(contents: [
+      HistoryItemContent(type: NSPasteboard.PasteboardType.string.rawValue, value: Data("same".utf8)),
+      HistoryItemContent(type: NSPasteboard.PasteboardType.rtf.rawValue, value: Data("rtf".utf8))
+    ])
+    rich.title = "same"
+    history.add(rich)
+    for index in 0..<4 { history.add(historyItem("newer-\(index)")) }
+    XCTAssertFalse(history.all.contains { $0.item == rich })
+
+    let subset = HistoryItem(contents: [
+      HistoryItemContent(type: NSPasteboard.PasteboardType.rtf.rawValue, value: Data("rtf".utf8))
+    ])
+    subset.title = "same"
+    let merged = history.add(subset)
+
+    XCTAssertEqual(merged.item.numberOfCopies, 2)
+    try assertStorageCounts(items: 5, contents: 6)
   }
 
   func testForkHistoryNavigationWrapsAtBothEnds() throws {

@@ -207,7 +207,7 @@ struct HistoryListView: View {
   private func scrollToPageStart(_ proxy: ScrollViewProxy) {
     Task { @MainActor in
       try? await Task.sleep(for: .milliseconds(10))
-      if let first = appState.history.items.first {
+      if let first = appState.history.unpinnedItems.first {
         proxy.scrollTo(first.id, anchor: .top)
       }
     }

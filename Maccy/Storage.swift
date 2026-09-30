@@ -143,7 +143,6 @@ class Storage {
     let search = Search()
 
     for mode in passes {
-      let scanContext = ModelContext(container)
       let descriptor: FetchDescriptor<HistoryItem>
       if mode == .exact, !query.isEmpty {
         let needle = query
@@ -161,10 +160,23 @@ class Storage {
       ]
 
       var matches: [(id: PersistentIdentifier, score: Double, pinned: Bool, index: Int)] = []
-      for (index, item) in try scanContext.fetch(metadata).enumerated() {
-        guard scope.matchesUncached(item),
-              let score = search.score(string: query, title: item.title, mode: mode) else { continue }
-        matches.append((item.persistentModelID, score, item.pin != nil, index))
+      let batchSize = 200
+      var offset = 0
+      while true {
+        // A fresh context releases relationship faults (scope classification)
+        // after each batch instead of retaining the whole history in memory.
+        let batchContext = ModelContext(container)
+        var page = metadata
+        page.fetchOffset = offset
+        page.fetchLimit = batchSize
+        let rows = try batchContext.fetch(page)
+        for (position, item) in rows.enumerated() {
+          guard scope.matchesUncached(item),
+                let score = search.score(string: query, title: item.title, mode: mode) else { continue }
+          matches.append((item.persistentModelID, score, item.pin != nil, offset + position))
+        }
+        offset += rows.count
+        if rows.count < batchSize { break }
       }
       guard !matches.isEmpty else { continue }
 
@@ -189,16 +201,30 @@ class Storage {
     ))
   }
 
-  func populateMissingDuplicateFingerprints() throws {
-    let missing = try context.fetch(FetchDescriptor<HistoryItem>(
-      predicate: #Predicate<HistoryItem> { $0.duplicateFingerprint == nil }
+  func fetchDuplicateCandidates(title: String) throws -> [HistoryItem] {
+    try context.fetch(FetchDescriptor<HistoryItem>(
+      predicate: #Predicate<HistoryItem> { $0.title == title }
     ))
-    guard !missing.isEmpty else { return }
-    for item in missing {
-      item.duplicateFingerprint = item.computeDuplicateFingerprint()
+  }
+
+  func populateMissingDuplicateFingerprints() throws {
+    let batchSize = 100
+    while true {
+      let migrationContext = ModelContext(container)
+      var descriptor = FetchDescriptor<HistoryItem>(
+        predicate: #Predicate<HistoryItem> { $0.duplicateFingerprint == nil }
+      )
+      descriptor.fetchLimit = batchSize
+      let missing = try migrationContext.fetch(descriptor)
+      guard !missing.isEmpty else { return }
+      for item in missing {
+        // The empty sentinel prevents payload-free legacy rows from being
+        // reprocessed on every launch.
+        item.duplicateFingerprint = item.computeDuplicateFingerprint() ?? ""
+      }
+      migrationContext.processPendingChanges()
+      try migrationContext.save()
     }
-    context.processPendingChanges()
-    try context.save()
   }
 
   func cleanupOrphanedContents() throws -> Int {
