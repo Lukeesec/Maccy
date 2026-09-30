@@ -2,52 +2,21 @@ import Defaults
 import Foundation
 import SwiftData
 
-/// Where a page of unpinned history resumes from.
-///
-/// A *value*, not a position. `descriptor.fetchOffset` cannot be used to page
-/// this store because the store is written to while the paging runs:
-/// `History.add()` deletes the row it consolidates a duplicate into,
-/// `History.delete()` removes whatever the user picked, and `limitHistorySize`
-/// trims the tail. Every delete below the current offset shifts the remaining
-/// rows up by one, so the reader steps over exactly one row and never sees it
-/// again — and `limitHistorySize` then trims against an undercount.
-///
-/// A keyset cursor carries the last row's sort key instead, so the next page
-/// resumes from the same place regardless of what was inserted or removed
-/// elsewhere. All three of `Sorter.By`'s keys are carried because the cursor is
-/// built before the sort order is known to the caller, and because the
-/// tiebreaker for one order is the primary key of another.
-struct HistoryPageCursor: Equatable, Sendable {
-  var lastCopiedAt: Date
-  var firstCopiedAt: Date
-  var numberOfCopies: Int
-
-  init(_ item: HistoryItem) {
-    lastCopiedAt = item.lastCopiedAt
-    firstCopiedAt = item.firstCopiedAt
-    numberOfCopies = item.numberOfCopies
-  }
-}
-
 @MainActor
 class Storage {
   static let shared = Storage()
 
+  struct UsageSnapshot {
+    let itemCount: Int
+    let oldest: Date?
+    let newest: Date?
+    let diskBytes: Int64
+  }
+
   /// Store-side equivalent of `Sorter`'s ordering.
   ///
-  /// `History` pages the store instead of fetching everything at launch, so the
-  /// store has to hand back rows in the same order `Sorter` would put them in —
-  /// otherwise page two is not the continuation of page one. Pinning is applied
-  /// afterwards by `Sorter`, because pinned items are fetched separately and in
-  /// full; this only covers `Defaults[.sortBy]`.
-  ///
-  /// The second descriptor is a tiebreaker, and is what makes keyset paging
-  /// work. `numberOfCopies` in particular is shared by thousands of rows, and a
-  /// cursor cannot resume inside a block of rows whose order is undefined. The
-  /// tiebreaker is the other timestamp, which is effectively unique per item,
-  /// so the pair orders the store totally. `Sorter` has no tiebreaker, but it
-  /// sorts with a stable sort over exactly these rows in exactly this order, so
-  /// it preserves whatever the store decided.
+  /// Pages need a deterministic order, especially when thousands of items have
+  /// the same copy count. Pinning is applied afterwards by `Sorter`.
   nonisolated static func historySortDescriptors(by: Sorter.By = Defaults[.sortBy]) -> [SortDescriptor<HistoryItem>] {
     switch by {
     case .firstCopiedAt:
@@ -71,14 +40,40 @@ class Storage {
   var container: ModelContainer
   var context: ModelContext { container.mainContext }
   var size: String {
-    guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).allValues.first?.value as? Int64, size > 1 else {
+    let bytes = diskBytes
+    guard bytes > 1 else {
       return ""
     }
 
-    return ByteCountFormatter().string(fromByteCount: size)
+    return ByteCountFormatter().string(fromByteCount: bytes)
   }
 
   private let url = URL.applicationSupportDirectory.appending(path: "Maccy/Storage.sqlite")
+
+  private var diskBytes: Int64 {
+    [url.path, url.path + "-wal", url.path + "-shm"].reduce(0) { total, path in
+      let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+      return total + ((attributes?[.size] as? NSNumber)?.int64Value ?? 0)
+    }
+  }
+
+  func usageSnapshot() -> UsageSnapshot {
+    let count = (try? context.fetchCount(FetchDescriptor<HistoryItem>())) ?? 0
+    var oldestDescriptor = FetchDescriptor<HistoryItem>(
+      sortBy: [SortDescriptor(\HistoryItem.lastCopiedAt)]
+    )
+    oldestDescriptor.fetchLimit = 1
+    var newestDescriptor = FetchDescriptor<HistoryItem>(
+      sortBy: [SortDescriptor(\HistoryItem.lastCopiedAt, order: .reverse)]
+    )
+    newestDescriptor.fetchLimit = 1
+    return UsageSnapshot(
+      itemCount: count,
+      oldest: try? context.fetch(oldestDescriptor).first?.lastCopiedAt,
+      newest: try? context.fetch(newestDescriptor).first?.lastCopiedAt,
+      diskBytes: diskBytes
+    )
+  }
 
   init() {
     var config = ModelConfiguration(url: url)
@@ -105,81 +100,105 @@ class Storage {
     )
   }
 
-  /// One page of unpinned items in `Defaults[.sortBy]` order, resuming from
-  /// `cursor` — or from the very top when it is `nil`.
-  ///
-  /// There is no `fetchOffset` here on purpose; see `HistoryPageCursor` for why
-  /// an offset loses rows against a store that is being written to while it is
-  /// read.
-  func fetchUnpinnedHistoryItems(
-    after cursor: HistoryPageCursor?,
-    limit: Int,
-    sortBy: Sorter.By = Defaults[.sortBy]
-  ) throws -> [HistoryItem] {
+  func countUnpinnedHistoryItems() throws -> Int {
+    try context.fetchCount(FetchDescriptor<HistoryItem>(
+      predicate: #Predicate<HistoryItem> { $0.pin == nil }
+    ))
+  }
+
+  func fetchUnpinnedPage(offset: Int, limit: Int, sortBy: Sorter.By = Defaults[.sortBy]) throws -> [HistoryItem] {
     var descriptor = FetchDescriptor<HistoryItem>(
-      predicate: Self.unpinnedPredicate(after: cursor, sortBy: sortBy),
+      predicate: #Predicate<HistoryItem> { $0.pin == nil },
       sortBy: Self.historySortDescriptors(by: sortBy)
     )
-    descriptor.fetchLimit = limit
-
+    descriptor.fetchOffset = max(0, offset)
+    descriptor.fetchLimit = max(1, limit)
     return try context.fetch(descriptor)
   }
 
-  /// Unpinned rows at or after `cursor` in `sortBy` order.
-  ///
-  /// The bound is strict on the primary key and *inclusive* on the tiebreaker.
-  /// That is deliberate: an inclusive tiebreaker re-reads the cursor row itself
-  /// — one row per page, which the caller's dedupe drops — but it also cannot
-  /// skip a row that happens to share both keys with the cursor. An exclusive
-  /// bound would silently lose such a row; there is no ordering to fall back on
-  /// once both keys are equal, because `PersistentIdentifier` is not
-  /// `Comparable` and so cannot be used as a third bound inside a `#Predicate`.
-  nonisolated private static func unpinnedPredicate(
-    after cursor: HistoryPageCursor?,
-    sortBy: Sorter.By
-  ) -> Predicate<HistoryItem> {
-    guard let cursor else {
-      return #Predicate<HistoryItem> { $0.pin == nil }
-    }
+  /// Age is measured from the last copy. Pins are kept until explicitly removed.
+  func pruneExpiredHistory(before cutoff: Date) throws -> Int {
+    let expired = FetchDescriptor<HistoryItem>(
+      predicate: #Predicate<HistoryItem> { $0.pin == nil && $0.lastCopiedAt < cutoff }
+    )
+    let count = try context.fetchCount(expired)
+    guard count > 0 else { return 0 }
 
-    switch sortBy {
-    case .firstCopiedAt:
-      let key = cursor.firstCopiedAt
-      let tiebreaker = cursor.lastCopiedAt
-      return #Predicate<HistoryItem> {
-        $0.pin == nil &&
-          ($0.firstCopiedAt < key || ($0.firstCopiedAt == key && $0.lastCopiedAt <= tiebreaker))
-      }
-    case .numberOfCopies:
-      let key = cursor.numberOfCopies
-      let tiebreaker = cursor.lastCopiedAt
-      return #Predicate<HistoryItem> {
-        $0.pin == nil &&
-          ($0.numberOfCopies < key || ($0.numberOfCopies == key && $0.lastCopiedAt <= tiebreaker))
-      }
-    default:
-      let key = cursor.lastCopiedAt
-      let tiebreaker = cursor.firstCopiedAt
-      return #Predicate<HistoryItem> {
-        $0.pin == nil &&
-          ($0.lastCopiedAt < key || ($0.lastCopiedAt == key && $0.firstCopiedAt <= tiebreaker))
-      }
-    }
+    try context.delete(model: HistoryItem.self, where: #Predicate {
+      $0.pin == nil && $0.lastCopiedAt < cutoff
+    })
+    context.processPendingChanges()
+    try context.save()
+    _ = try cleanupOrphanedContents()
+    return count
   }
 
-  /// Items whose title contains `query`, answered by SQLite rather than by
-  /// walking every decorator in memory.
-  ///
-  /// `localizedStandardContains` is case *and* diacritic insensitive, so the
-  /// result is a superset of what `Search`'s case-insensitive `range(of:)` would
-  /// match. That matters: callers use this only to narrow the candidate set and
-  /// then run the real matcher over it, so a superset cannot change the answer.
-  func fetchHistoryItems(titleContaining query: String) throws -> [HistoryItem] {
-    try context.fetch(
-      FetchDescriptor<HistoryItem>(
-        predicate: #Predicate<HistoryItem> { $0.title.localizedStandardContains(query) }
-      )
-    )
+  /// Search all retained rows through a disposable context. Only scalar
+  /// metadata is fetched for the common unscoped case; visible rows are later
+  /// resolved in the main context one page at a time.
+  func searchHistoryIdentifiers(query: String, scope: ForkScope) throws -> [PersistentIdentifier] {
+    let selectedMode = Defaults[.searchMode]
+    let passes: [Search.Mode] = selectedMode == .mixed
+      ? [.exact, .regexp, .fuzzy] : [selectedMode]
+    let search = Search()
+
+    for mode in passes {
+      let scanContext = ModelContext(container)
+      let descriptor: FetchDescriptor<HistoryItem>
+      if mode == .exact, !query.isEmpty {
+        let needle = query
+        descriptor = FetchDescriptor<HistoryItem>(
+          predicate: #Predicate<HistoryItem> { $0.title.localizedStandardContains(needle) },
+          sortBy: Self.historySortDescriptors()
+        )
+      } else {
+        descriptor = FetchDescriptor<HistoryItem>(sortBy: Self.historySortDescriptors())
+      }
+      var metadata = descriptor
+      metadata.propertiesToFetch = [
+        \HistoryItem.title, \HistoryItem.pin, \HistoryItem.lastCopiedAt,
+        \HistoryItem.firstCopiedAt, \HistoryItem.numberOfCopies
+      ]
+
+      var matches: [(id: PersistentIdentifier, score: Double, pinned: Bool, index: Int)] = []
+      for (index, item) in try scanContext.fetch(metadata).enumerated() {
+        guard scope.matchesUncached(item),
+              let score = search.score(string: query, title: item.title, mode: mode) else { continue }
+        matches.append((item.persistentModelID, score, item.pin != nil, index))
+      }
+      guard !matches.isEmpty else { continue }
+
+      if mode == .fuzzy {
+        matches.sort { $0.score == $1.score ? $0.index < $1.index : $0.score < $1.score }
+      } else {
+        let pinsFirst = Defaults[.pinTo] == .top
+        matches.sort { lhs, rhs in
+          if lhs.pinned != rhs.pinned { return pinsFirst ? lhs.pinned : !lhs.pinned }
+          return lhs.index < rhs.index
+        }
+      }
+      return matches.map(\.id)
+    }
+
+    return []
+  }
+
+  func fetchDuplicateCandidates(fingerprint: String) throws -> [HistoryItem] {
+    try context.fetch(FetchDescriptor<HistoryItem>(
+      predicate: #Predicate<HistoryItem> { $0.duplicateFingerprint == fingerprint }
+    ))
+  }
+
+  func populateMissingDuplicateFingerprints() throws {
+    let missing = try context.fetch(FetchDescriptor<HistoryItem>(
+      predicate: #Predicate<HistoryItem> { $0.duplicateFingerprint == nil }
+    ))
+    guard !missing.isEmpty else { return }
+    for item in missing {
+      item.duplicateFingerprint = item.computeDuplicateFingerprint()
+    }
+    context.processPendingChanges()
+    try context.save()
   }
 
   func cleanupOrphanedContents() throws -> Int {

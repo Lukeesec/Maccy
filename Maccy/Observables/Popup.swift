@@ -227,7 +227,9 @@ class Popup {
     // turned into "ç" and consumed as text input, which is why Ctrl+C worked and
     // Option+C did not. This monitor runs before the responder chain, so it sees
     // the event either way. Returning nil swallows it so nothing types a "ç".
-    if ForkStyle.isActive, !isClosed(), KeyChord.isCopyShortcut(event) {
+    if ForkStyle.isActive, !isClosed(),
+       !(NSApp.keyWindow?.firstResponder is PreviewTextView),
+       KeyChord.isCopyShortcut(event) {
       Task { @MainActor in
         AppState.shared.copySelection()
       }

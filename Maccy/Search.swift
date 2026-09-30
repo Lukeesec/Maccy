@@ -33,24 +33,37 @@ class Search {
 
   typealias Searchable = HistoryItemDecorator
 
-  /// True when a case-insensitive substring prefilter is guaranteed to return a
-  /// *superset* of what `mode` matches, and can therefore be pushed into the
-  /// store without changing a single result.
-  ///
-  /// Only `.exact` qualifies:
-  /// - `.regexp` — `foo|bar` or `^x` are not substrings of anything; SQLite has
-  ///   no regex operator to push down either.
-  /// - `.fuzzy` — the whole point of fuzzy matching is finding titles that do
-  ///   *not* contain the query (`hlo` → `hello`). See `prescreen(_:_:)` for how
-  ///   fuzzy mode is made fast instead.
-  /// - `.mixed` — falls back to regex and then fuzzy when the exact pass comes
-  ///   up empty, so narrowing its input would break both fallbacks.
-  static func canNarrowInStore(_ mode: Mode) -> Bool {
-    mode == .exact
+  /// Match a stored title without constructing a visible row or loading its
+  /// clipboard payload. The database search uses this for older pages.
+  func score(string: String, title: String, mode: Mode) -> Double? {
+    guard !string.isEmpty else { return 0 }
+    switch mode {
+    case .exact:
+      return title.range(of: string, options: .caseInsensitive) == nil ? nil : 0
+    case .regexp:
+      return title.range(of: string, options: .regularExpression) == nil ? nil : 0
+    case .fuzzy:
+      if titlePatternQuery != string {
+        titlePatternQuery = string
+        titlePattern = fuse.createPattern(from: string)
+        titleQueryMask = Self.characterMask(string)
+      }
+      let queryMask = titleQueryMask
+      if queryMask != 0 {
+        let required = max(1, Int((Double(queryMask.nonzeroBitCount) * Self.prescreenCoverage).rounded(.up)))
+        guard (Self.characterMask(title) & queryMask).nonzeroBitCount >= required else { return nil }
+      }
+      return fuse.search(titlePattern, in: String(title.prefix(fuzzySearchLimit)))?.score
+    case .mixed:
+      return nil // The caller runs exact, regexp, then fuzzy over the whole store.
+    }
   }
 
   private let fuse = Fuse(threshold: 0.7) // threshold found by trial-and-error
   private let fuzzySearchLimit = 5_000
+  private var titlePatternQuery: String?
+  private var titlePattern: Fuse.Pattern?
+  private var titleQueryMask: UInt64 = 0
 
   // Fraction of the query's distinct alphanumerics that must appear somewhere in
   // a title for it to be worth handing to Fuse. Fuse's 0.7 threshold tolerates a

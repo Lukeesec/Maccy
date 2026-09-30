@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Defaults
 import Sauce
 import SwiftData
@@ -68,6 +69,7 @@ class HistoryItem {
   var firstCopiedAt: Date = Date.now
   var lastCopiedAt: Date = Date.now
   var numberOfCopies: Int = 1
+  var duplicateFingerprint: String?
   var pin: String?
   var title = ""
 
@@ -90,6 +92,37 @@ class HistoryItem {
       .allSatisfy { content in
         contents.contains(where: { $0.type == content.type && $0.value == content.value })
       }
+  }
+
+  /// A compact candidate key; `supersedes` remains the final equality check.
+  /// Prefer plain text so rich and plain variants of the same copy meet.
+  func computeDuplicateFingerprint() -> String? {
+    let preferred = [
+      NSPasteboard.PasteboardType.string.rawValue,
+      NSPasteboard.PasteboardType.fileURL.rawValue,
+      NSPasteboard.PasteboardType.png.rawValue,
+      NSPasteboard.PasteboardType.tiff.rawValue,
+      NSPasteboard.PasteboardType.jpeg.rawValue,
+      NSPasteboard.PasteboardType.heic.rawValue,
+      NSPasteboard.PasteboardType.rtf.rawValue,
+      NSPasteboard.PasteboardType.html.rawValue
+    ]
+    let usable = contents.filter { !Self.transientTypes.contains($0.type) && $0.value != nil }
+    guard let type = preferred.first(where: { preferredType in
+      usable.contains(where: { $0.type == preferredType })
+    }) ?? usable.map(\.type).sorted().first else { return nil }
+
+    let values = usable.filter { $0.type == type }.compactMap(\.value).sorted {
+      $0.lexicographicallyPrecedes($1)
+    }
+    var hash = SHA256()
+    hash.update(data: Data(type.utf8))
+    for value in values {
+      var length = UInt64(value.count).bigEndian
+      withUnsafeBytes(of: &length) { hash.update(data: Data($0)) }
+      hash.update(data: value)
+    }
+    return hash.finalize().map { String(format: "%02x", $0) }.joined()
   }
 
   func generateTitle() -> String {

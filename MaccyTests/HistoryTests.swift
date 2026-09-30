@@ -6,6 +6,7 @@ import SwiftData
 @MainActor
 class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
   let savedSize = Defaults[.size]
+  let savedRetentionMonths = Defaults[.retentionMonths]
   let savedSortBy = Defaults[.sortBy]
   let savedPinTo = Defaults[.pinTo]
   let history = History.shared
@@ -15,6 +16,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     AppState.shared.focusSearchRow()
     history.clearAll()
     Defaults[.size] = 10
+    Defaults[.retentionMonths] = 6
     Defaults[.sortBy] = .firstCopiedAt
     Defaults[.pinTo] = .bottom
   }
@@ -22,6 +24,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
   override func tearDown() {
     super.tearDown()
     Defaults[.size] = savedSize
+    Defaults[.retentionMonths] = savedRetentionMonths
     Defaults[.sortBy] = savedSortBy
     Defaults[.pinTo] = savedPinTo
   }
@@ -34,6 +37,15 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     let first = history.add(historyItem("foo"))
     let second = history.add(historyItem("bar"))
     XCTAssertEqual(history.items, [second, first])
+  }
+
+  func testAddingDuringSearchKeepsResultsFiltered() {
+    let match = history.add(historyItem("matching text"))
+    history.searchQuery = "matching"
+
+    history.add(historyItem("unrelated text"))
+
+    XCTAssertEqual(history.items, [match])
   }
 
   func testAddingPersistedDuplicate() throws {
@@ -49,6 +61,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     let merged = history.add(third)
 
     XCTAssertEqual(history.all, [merged])
+    XCTAssertEqual(history.items, [merged])
     XCTAssertEqual(Set(merged.item.contents), Set(transferredContents))
     XCTAssertTrue(merged.item.lastCopiedAt > merged.item.firstCopiedAt)
     XCTAssertEqual(merged.item.numberOfCopies, 2)
@@ -236,7 +249,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     try assertStorageCounts(items: 0, contents: 0)
   }
 
-  func testMaxSize() throws {
+  func testPageSizeDoesNotDeleteOlderHistory() throws {
     var items: [HistoryItemDecorator] = []
     for index in 0...10 {
       items.append(history.add(historyItem(String(index))))
@@ -245,10 +258,12 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertEqual(history.items.count, 10)
     XCTAssertTrue(history.items.contains(items[10]))
     XCTAssertFalse(history.items.contains(items[0]))
-    try assertStorageCounts(items: 10, contents: 10)
+    try assertStorageCounts(items: 11, contents: 11)
+    history.showOlderPage()
+    XCTAssertEqual(history.items.map(\.title), ["0"])
   }
 
-  func testMaxSizeIgnoresPinned() {
+  func testPageSizeIgnoresPinned() {
     var items: [HistoryItemDecorator] = []
 
     let item = history.add(historyItem("0"))
@@ -265,7 +280,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertFalse(history.items.contains(items[1]))
   }
 
-  func testMaxSizeIsChanged() {
+  func testPageSizeIsChanged() throws {
     var items: [HistoryItemDecorator] = []
     for index in 0...10 {
       items.append(history.add(historyItem(String(index))))
@@ -276,6 +291,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertEqual(history.items.count, 5)
     XCTAssertTrue(history.items.contains(items[10]))
     XCTAssertFalse(history.items.contains(items[5]))
+    try assertStorageCounts(items: 12, contents: 12)
   }
 
   func testReassigningSameSearchQueryKeepsSelection() async throws {
@@ -342,12 +358,29 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
 
     XCTAssertEqual(
       ScopePickerView.contentHeight(for: ScopePickerRow.ordered),
-      183
+      220
     )
     XCTAssertEqual(
       ScopePickerView.contentHeight(for: [.settings]),
       38
     )
+    XCTAssertEqual(ScopePickerRow.rows(matching: "stats"), [.usage])
+  }
+
+  func testSlashCommandLeavesUsageView() throws {
+    guard ForkStyle.isActive else {
+      throw XCTSkip("Scope picker is enabled by the macOS 26 fork")
+    }
+
+    AppState.shared.scopePickerOpen = true
+    AppState.shared.scopePickerUsageOpen = true
+    defer { AppState.shared.resetScopePicker() }
+
+    history.searchQuery = "/text"
+    AppState.shared.syncScopePicker(with: history.searchQuery)
+
+    XCTAssertFalse(AppState.shared.scopePickerUsageOpen)
+    XCTAssertEqual(AppState.shared.scopePickerRows, [.scope(.text)])
   }
 
   func testPreviewEscapeBacksOutOneLayerPerPress() async throws {
@@ -385,53 +418,87 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertFalse(AppState.shared.handlePreviewEscape())
   }
 
-  func testPagedHistoryRemainsCompleteScrollableAndSearchable() async throws {
+  func testPagedHistoryRemainsStoredAndSearchable() async throws {
     guard ForkStyle.isActive else {
       throw XCTSkip("Paged history is enabled by the macOS 26 fork")
     }
 
-    // Cross both paging boundaries (60-row first paint and 120-row remainder)
-    // so this exercises the same storage path as a real, scrollable history.
-    Defaults[.size] = 250
+    // Keep more rows than the visible page and search for the oldest one.
+    Defaults[.size] = 60
     let total = 181
     for index in 0..<total {
       let title = index == 0 ? "unique-deep-history-entry" : "paged-history-\(index)"
       let item = historyItem(title)
-      let timestamp = Date(timeIntervalSince1970: TimeInterval(index + 1))
+      let timestamp = Date.now.addingTimeInterval(TimeInterval(index - total) * 60)
       item.firstCopiedAt = timestamp
       item.lastCopiedAt = timestamp
     }
     Storage.shared.context.processPendingChanges()
     try Storage.shared.context.save()
 
-    // Model a relaunch: nothing is kept in the in-memory arrays, but the SwiftData
-    // store is intact. load() must rebuild every page without dropping the tail.
+    // Model a relaunch: the store remains complete, but only one page is loaded.
     history.all = []
     history.items = []
     try await history.load()
-    await waitUntil { self.history.all.count == total }
-
-    XCTAssertEqual(history.all.count, total)
-    XCTAssertEqual(history.items.count, total)
+    XCTAssertEqual(history.all.count, 60)
+    XCTAssertEqual(history.items.count, 60)
     XCTAssertEqual(history.all.first?.title, "paged-history-180")
-    XCTAssertEqual(history.all.last?.title, "unique-deep-history-entry")
     try assertStorageCounts(items: total, contents: total)
 
-    guard let last = history.lastVisibleItem else {
-      return XCTFail("Expected the oldest loaded history row")
-    }
-    AppState.shared.navigator.select(item: last)
-    XCTAssertEqual(AppState.shared.navigator.scrollTarget, last.id)
+    history.showOlderPage()
+    history.showOlderPage()
+    history.showOlderPage()
+    XCTAssertEqual(history.items.last?.title, "unique-deep-history-entry")
+    history.showNewerPage()
+    history.showNewerPage()
+    XCTAssertEqual(history.items.first?.title, "paged-history-120")
 
     history.searchQuery = "unique-deep-history-entry"
     await waitUntil {
       self.history.items.count == 1
         && self.history.items.first?.title == "unique-deep-history-entry"
     }
-    XCTAssertEqual(history.items.first?.item, last.item)
+    XCTAssertEqual(history.items.first?.title, "unique-deep-history-entry")
 
     history.searchQuery = ""
-    await waitUntil { self.history.items.count == total }
+    await waitUntil { self.history.items.count == 60 }
+  }
+
+  func testSixMonthRetentionKeepsPinsAndRemovesExpiredCopies() async throws {
+    let recent = history.add(historyItem("recent"))
+    let recopied = history.add(historyItem("recopied"))
+    let expired = history.add(historyItem("expired"))
+    let pinned = history.add(historyItem("pinned old copy"))
+    history.togglePin(pinned)
+
+    let oldDate = try XCTUnwrap(Calendar.current.date(byAdding: .month, value: -7, to: .now))
+    expired.item.lastCopiedAt = oldDate
+    recopied.item.firstCopiedAt = oldDate
+    pinned.item.lastCopiedAt = oldDate
+    try Storage.shared.context.save()
+
+    try await history.load()
+
+    XCTAssertTrue(history.items.contains(recent))
+    XCTAssertTrue(history.items.contains(recopied))
+    XCTAssertFalse(history.items.contains(expired))
+    XCTAssertTrue(history.items.contains(pinned))
+    try assertStorageCounts(items: 3, contents: 3)
+  }
+
+  func testRecopyOfItemOutsideBrowsePageMergesStoredHistory() throws {
+    Defaults[.size] = 5
+    for index in 0..<12 {
+      history.add(historyItem("deep-\(index)"))
+    }
+    XCTAssertEqual(history.all.filter(\.isUnpinned).count, 5)
+    try assertStorageCounts(items: 12, contents: 12)
+
+    let recopy = history.add(historyItem("deep-0"))
+
+    XCTAssertEqual(recopy.item.numberOfCopies, 2)
+    XCTAssertEqual(recopy.item.title, "deep-0")
+    try assertStorageCounts(items: 12, contents: 12)
   }
 
   func testForkHistoryNavigationWrapsAtBothEnds() throws {
@@ -522,9 +589,8 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
 
     XCTAssertEqual(history.all.last, pinned)
 
-    // Re-copy the pinned item. It is detected as a duplicate, removed and
-    // re-inserted while `limitHistorySize` trims an exceeding unpinned item.
-    // Before the fix this inserted at a stale, out-of-bounds index and crashed.
+    // Re-copy the pinned item while the browse page is full. It must replace
+    // the stored duplicate without losing the pin or overflowing the page.
     let readded = history.add(historyItem("pinned"))
 
     XCTAssertTrue(history.all.contains(readded))

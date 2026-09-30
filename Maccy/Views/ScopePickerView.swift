@@ -1,4 +1,5 @@
 import Foundation
+import Defaults
 import SwiftUI
 
 // -----------------------------------------------------------------------------
@@ -32,6 +33,7 @@ import SwiftUI
 /// and ⌘, are the only ways out of the panel into preferences.
 enum ScopePickerRow: Hashable, Identifiable {
   case scope(ForkScope)
+  case usage
   case settings
 
   var id: Self { self }
@@ -44,6 +46,7 @@ enum ScopePickerRow: Hashable, Identifiable {
     .scope(.links),
     .scope(.images),
     .scope(.files),
+    .usage,
     .settings
   ]
 
@@ -54,6 +57,7 @@ enum ScopePickerRow: Hashable, Identifiable {
   var token: String {
     switch self {
     case .scope(let scope): return "/\(scope.token)"
+    case .usage: return "/stats"
     case .settings: return "/set"
     }
   }
@@ -61,6 +65,7 @@ enum ScopePickerRow: Hashable, Identifiable {
   var titleKey: LocalizedStringKey {
     switch self {
     case .scope(let scope): return scopeTitleKey(scope)
+    case .usage: return "scope_usage"
     case .settings: return "scope_settings"
     }
   }
@@ -75,6 +80,7 @@ enum ScopePickerRow: Hashable, Identifiable {
   private var needles: [String] {
     switch self {
     case .scope(let scope): return [scope.token, scope.title]
+    case .usage: return ["stats", "usage", NSLocalizedString("scope_usage", comment: "")]
     case .settings: return ["set", NSLocalizedString("scope_settings", comment: "")]
     }
   }
@@ -172,7 +178,9 @@ struct ScopeIndicatorView: View {
         Color.clear
           .frame(
             width: boxSize,
-            height: ScopePickerView.contentHeight(for: appState.scopePickerRows)
+            height: appState.scopePickerUsageOpen
+              ? ScopePickerView.usageHeight
+              : ScopePickerView.contentHeight(for: appState.scopePickerRows)
           )
           .offset(y: -popoverAnchorTopOffset)
           .allowsHitTesting(false)
@@ -225,6 +233,7 @@ struct ScopePickerView: View {
   private static let rowSpacing: CGFloat = 1
   private static let dividerHeight: CGFloat = 9
   private static let containerPadding: CGFloat = 6
+  static let usageHeight: CGFloat = 198
 
   /// Exact content height of the current picker, used by the external popover's
   /// positioning rectangle to keep its top level with the main panel even while
@@ -232,11 +241,11 @@ struct ScopePickerView: View {
   static func contentHeight(for rows: [ScopePickerRow]) -> CGFloat {
     guard !rows.isEmpty else { return 0 }
 
-    let hasDivider = rows.contains(.settings) && rows.count > 1
-    let elementCount = rows.count + (hasDivider ? 1 : 0)
+    let dividerCount = rows.dropFirst().filter { $0 == .settings || $0 == .usage }.count
+    let elementCount = rows.count + dividerCount
     return CGFloat(rows.count) * rowHeight
       + CGFloat(max(0, elementCount - 1)) * rowSpacing
-      + (hasDivider ? dividerHeight : 0)
+      + CGFloat(dividerCount) * dividerHeight
       + containerPadding * 2
   }
 
@@ -244,18 +253,64 @@ struct ScopePickerView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: Self.rowSpacing) {
-      ForEach(rows) { row in
-        if row == .settings && rows.count > 1 {
-          Divider()
-            .padding(.vertical, 4)
+      if appState.scopePickerUsageOpen {
+        usageView
+      } else {
+        ForEach(rows) { row in
+          if (row == .settings || row == .usage) && rows.count > 1 {
+            Divider()
+              .padding(.vertical, 4)
+          }
+          rowView(row)
         }
-        rowView(row)
       }
     }
     .padding(Self.containerPadding)
     .frame(width: Self.width, alignment: .leading)
     .fixedSize()
     .accessibilityElement(children: .contain)
+  }
+
+  @ViewBuilder
+  private var usageView: some View {
+    if let usage = appState.usageSnapshot {
+      VStack(alignment: .leading, spacing: 8) {
+        Text("scope_usage")
+          .font(.system(size: 13, weight: .semibold))
+        HStack {
+          Text("scope_usage_items")
+          Spacer()
+          Text(usage.itemCount.formatted())
+        }
+        HStack {
+          Text("scope_usage_limit")
+          Spacer()
+          Text(Defaults[.size].formatted())
+        }
+        HStack {
+          Text("scope_usage_retention")
+          Spacer()
+          Text(String(format: NSLocalizedString("scope_usage_months", comment: ""), Defaults[.retentionMonths]))
+        }
+        HStack {
+          Text("scope_usage_oldest")
+          Spacer()
+          Text(usage.oldest?.formatted(date: .abbreviated, time: .omitted) ?? "—")
+        }
+        HStack {
+          Text("scope_usage_newest")
+          Spacer()
+          Text(usage.newest?.formatted(date: .abbreviated, time: .omitted) ?? "—")
+        }
+        HStack {
+          Text("scope_usage_disk")
+          Spacer()
+          Text(ByteCountFormatter.string(fromByteCount: usage.diskBytes, countStyle: .file))
+        }
+      }
+      .font(.system(size: 12))
+      .padding(8)
+    }
   }
 
   @ViewBuilder

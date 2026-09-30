@@ -37,6 +37,16 @@
 "scope_images" = "Images";
 "scope_files" = "Files";
 "scope_settings" = "Settings…";
+"scope_usage" = "Usage & Stats";
+"scope_usage_items" = "Saved items";
+"scope_usage_limit" = "Rows per page";
+"scope_usage_retention" = "Retention";
+"scope_usage_months" = "%d months";
+"scope_usage_oldest" = "Oldest copy";
+"scope_usage_newest" = "Newest copy";
+"scope_usage_disk" = "Disk use";
+"history_page_newer" = "Newer";
+"history_page_older" = "Older";
 "scope_picker_accessibility_label" = "Filter by kind";
 "preview_edited_badge" = "Edited";
 "preview_copy_edited" = "Copy edited";

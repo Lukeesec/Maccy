@@ -59,7 +59,8 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
         // Copy is checked first and off the key code: Option+C produces a
         // character and was being eaten as text input before the chord table saw
         // it, which is why Ctrl+C worked and Option+C did not.
-        if KeyChord.isCopyShortcut(event) {
+        if !(NSApp.keyWindow?.firstResponder is PreviewTextView),
+           KeyChord.isCopyShortcut(event) {
           appState.copySelection()
           return .handled
         }

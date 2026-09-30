@@ -85,8 +85,18 @@ enum ForkScope: String, CaseIterable, Identifiable, Defaults.Serializable {
       return true
     }
 
-    let kind = ForkItemKindCache.kind(of: item)
+    return matches(kind: ForkItemKindCache.kind(of: item))
+  }
 
+  /// Search scans a short-lived model context, so those objects must not enter
+  /// the long-lived per-item cache used by the visible page.
+  @MainActor
+  func matchesUncached(_ item: HistoryItem) -> Bool {
+    guard self != .all else { return true }
+    return matches(kind: ForkItemKind(item))
+  }
+
+  private func matches(kind: ForkItemKind) -> Bool {
     switch self {
     case .all:
       return true

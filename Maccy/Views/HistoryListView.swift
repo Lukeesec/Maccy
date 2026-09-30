@@ -112,7 +112,30 @@ struct HistoryListView: View {
 
     ScrollView {
       ScrollViewReader { proxy in
-        historyList
+        VStack(spacing: 0) {
+          historyList
+          if appState.history.pageCount > 1 {
+            HStack {
+              Button("history_page_newer") {
+                appState.history.showNewerPage()
+                scrollToPageStart(proxy)
+              }
+              .disabled(!appState.history.hasNewerPage)
+              Spacer()
+              Text("\(appState.history.pageIndex + 1) / \(appState.history.pageCount)")
+                .foregroundStyle(.secondary)
+              Spacer()
+              Button("history_page_older") {
+                appState.history.showOlderPage()
+                scrollToPageStart(proxy)
+              }
+              .disabled(!appState.history.hasOlderPage)
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, Popup.rowInset + 8)
+            .padding(.vertical, 8)
+          }
+        }
         .padding(.top, scrollTopPadding)
         .padding(.bottom, scrollBottomPadding)
         .task(id: appState.navigator.scrollTarget) {
@@ -179,5 +202,14 @@ struct HistoryListView: View {
     }
     .padding(.bottom, bottomPinsVisible ? bottomPadding : 0)
     .readHeight(appState, into: \.popup.extraBottomHeight)
+  }
+
+  private func scrollToPageStart(_ proxy: ScrollViewProxy) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(10))
+      if let first = appState.history.items.first {
+        proxy.scrollTo(first.id, anchor: .top)
+      }
+    }
   }
 }

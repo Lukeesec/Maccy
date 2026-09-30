@@ -26,6 +26,8 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       // a new search: refreshing with resetSelection would otherwise jump to the
       // first result just as the editor takes focus.
       guard oldValue != searchQuery else { return }
+      pageIndex = 0
+      searchCacheKey = nil
 
       throttler.throttle { [self] in
         Task { @MainActor in
@@ -44,6 +46,8 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
   var scope: ForkScope = .all {
     didSet {
       guard oldValue != scope else { return }
+      pageIndex = 0
+      searchCacheKey = nil
 
       Task { @MainActor in
         refreshItems(resetSelection: true)
@@ -68,26 +72,12 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     return items.first { $0.shortcuts.contains(where: { $0.key == key }) }
   }
 
-  // Enough rows to fill the popup at its tallest, so the first paint is complete.
-  // The rest arrives page by page, yielding to the main actor between pages.
-  private static let firstPageSize = 60
-  private static let pageSize = 120
-
-  // Recomputing `items` costs a `Search` pass over everything loaded so far, and
-  // a SQLite query on top of that when a query is live. Doing it once per page
-  // is what made paging quadratic, so it is coalesced: at most one refresh per
-  // interval while paging runs, plus one guaranteed refresh when it finishes.
-  private static let refreshInterval: TimeInterval = 0.15
-
   private let search = Search()
   private let sorter = Sorter()
   private let throttler = Throttler(minimumDelay: 0.2)
 
   @ObservationIgnored
   private var sessionLog: [Int: HistoryItem] = [:]
-
-  @ObservationIgnored
-  private var loadTask: Task<Void, Never>?
 
   // The distinction between `all` and `items` is the following:
   // - `all` stores all history items, even the ones that are currently hidden by a search
@@ -115,6 +105,18 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     }
 
     Task {
+      for await _ in Defaults.updates(.size, initial: false) {
+        try? await load()
+      }
+    }
+
+    Task {
+      for await _ in Defaults.updates(.retentionMonths, initial: false) {
+        try? await load()
+      }
+    }
+
+    Task {
       for await _ in Defaults.updates(.showSpecialSymbols, initial: false) {
         for item in items {
           await updateTitle(item: item, title: item.item.generateTitle())
@@ -131,203 +133,110 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     }
   }
 
+  private struct SearchCacheKey: Equatable {
+    let query: String
+    let scope: ForkScope
+    let mode: Search.Mode
+    let sortBy: Sorter.By
+  }
+
+  @ObservationIgnored private var searchCacheKey: SearchCacheKey?
+  @ObservationIgnored private var searchMatchIDs: [PersistentIdentifier] = []
+  @ObservationIgnored private var expiryTask: Task<Void, Never>?
+
+  var pageIndex = 0
+  var totalUnpinnedCount = 0
+  var pageCount: Int {
+    let total = searchQuery.isEmpty && scope == .all ? totalUnpinnedCount : searchMatchIDs.count
+    let pageSize = max(1, Defaults[.size])
+    return max(1, (total + pageSize - 1) / pageSize)
+  }
+  var hasNewerPage: Bool { pageIndex > 0 }
+  var hasOlderPage: Bool {
+    let total = searchQuery.isEmpty && scope == .all ? totalUnpinnedCount : searchMatchIDs.count
+    return (pageIndex + 1) * max(1, Defaults[.size]) < total
+  }
+
   @MainActor
   func load() async throws {
-    loadTask?.cancel()
-    loadTask = nil
+    try expireOldHistory()
+    try Storage.shared.populateMissingDuplicateFingerprints()
+    searchCacheKey = nil
+    pageIndex = 0
+    try loadBrowsePage()
 
-    guard ForkStyle.isActive else {
-      let descriptor = FetchDescriptor<HistoryItem>()
-      let results = try Storage.shared.context.fetch(descriptor)
-      all = sorter.sort(results).map { HistoryItemDecorator($0) }
-      items = all
-
-      limitHistorySize(to: Defaults[.size])
-
-      updateShortcuts()
-      // Ensure that panel size is proper *after* loading all items.
-      Task {
-        AppState.shared.popup.needsResize = true
+    if expiryTask == nil {
+      expiryTask = Task { @MainActor [weak self] in
+        while !Task.isCancelled {
+          try? await Task.sleep(for: .seconds(86_400))
+          guard !Task.isCancelled, let self else { return }
+          do {
+            try self.expireOldHistory()
+            try self.loadBrowsePage()
+          } catch {
+            self.logger.error("Failed to expire history: \(String(reflecting: error))")
+          }
+        }
       }
-      return
     }
+  }
 
-    // Pinned items are few - the pin alphabet is a fixed 21 characters - and
-    // `Sorter` has to place them relative to everything else, so they are always
-    // fetched in full. Only unpinned items are paged.
-    let sortBy = Defaults[.sortBy]
-    let pinned = (try? Storage.shared.fetchPinnedHistoryItems()) ?? []
-    let firstPage = (try? Storage.shared.fetchUnpinnedHistoryItems(
-      after: nil,
-      limit: Self.firstPageSize,
-      sortBy: sortBy
-    )) ?? []
+  @MainActor
+  private func expireOldHistory() throws {
+    let months = max(1, Defaults[.retentionMonths])
+    guard let cutoff = Calendar.current.date(byAdding: .month, value: -months, to: .now) else { return }
+    let removed = try Storage.shared.pruneExpiredHistory(before: cutoff)
+    if removed > 0 {
+      searchCacheKey = nil
+    }
+  }
 
-    all = sorter.sort(pinned + firstPage, by: sortBy).map { HistoryItemDecorator($0) }
+  @MainActor
+  private func loadBrowsePage() throws {
+    let pageSize = max(1, Defaults[.size])
+    totalUnpinnedCount = try Storage.shared.countUnpinnedHistoryItems()
+    if pageIndex * pageSize >= totalUnpinnedCount && pageIndex > 0 {
+      pageIndex = max(0, (totalUnpinnedCount - 1) / pageSize)
+    }
+    let pinned = try Storage.shared.fetchPinnedHistoryItems()
+    let unpinned = try Storage.shared.fetchUnpinnedPage(
+      offset: pageIndex * pageSize,
+      limit: pageSize
+    )
+    var existing: [PersistentIdentifier: HistoryItemDecorator] = [:]
+    for decorator in all + items {
+      existing[decorator.item.persistentModelID] = decorator
+    }
+    all = sorter.sort(pinned + unpinned).map { item in
+      existing[item.persistentModelID] ?? HistoryItemDecorator(item)
+    }
     refreshItems(resetSelection: false)
     updateShortcuts()
     AppState.shared.popup.needsResize = true
-
-    guard firstPage.count == Self.firstPageSize, let boundary = firstPage.last else {
-      // The whole history fits in one page, so there is nothing to continue.
-      limitHistorySize(to: Defaults[.size])
-      updateShortcuts()
-      return
-    }
-
-    let cursor = HistoryPageCursor(boundary)
-    loadTask = Task { @MainActor [weak self] in
-      await self?.loadRemainder(after: cursor, by: sortBy)
-    }
   }
 
-  /// Page in everything after the first page, yielding between pages so the
-  /// popup stays responsive while it happens.
-  ///
-  /// Paging is keyset-based: each page resumes from the previous page's last
-  /// row *by value*. It cannot use `fetchOffset`, because this very class writes
-  /// to the store while the paging runs — `add()` deletes the row it
-  /// consolidates a duplicate into, `delete()` removes whatever the user picked,
-  /// `limitHistorySize` trims the tail — and every delete below the current
-  /// offset would shift the store up by one and step the reader over exactly one
-  /// row for the rest of the session. See `HistoryPageCursor`.
   @MainActor
-  private func loadRemainder(after start: HistoryPageCursor, by sortBy: Sorter.By) async {
-    var cursor = start
-    var limit = Self.pageSize
-    var pendingRefresh = false
-    var lastRefresh = Date.now
-
-    while !Task.isCancelled {
-      await Task.yield()
-      guard !Task.isCancelled else { return }
-
-      guard let page = try? Storage.shared.fetchUnpinnedHistoryItems(
-        after: cursor,
-        limit: limit,
-        sortBy: sortBy
-      ), let boundary = page.last else {
-        break
-      }
-
-      let added = merge(page, by: sortBy)
-      pendingRefresh = pendingRefresh || added > 0
-
-      let read = page.count
-      cursor = HistoryPageCursor(boundary)
-
-      if read < limit {
-        break
-      }
-
-      if added == 0 {
-        // A whole page of rows already loaded. The cursor's bound is inclusive
-        // on the tiebreaker, so this can only happen when more than `limit` rows
-        // share the cursor's key *and* its tiebreaker — pathological, but it
-        // would otherwise re-read the same block forever. Widen the window until
-        // it clears the block.
-        limit *= 2
-      } else {
-        limit = Self.pageSize
-      }
-
-      if pendingRefresh, Date.now.timeIntervalSince(lastRefresh) >= Self.refreshInterval {
-        refreshItems(resetSelection: false)
-        AppState.shared.popup.needsResize = true
-        pendingRefresh = false
-        lastRefresh = Date.now
-      }
+  func showOlderPage() {
+    guard hasOlderPage else { return }
+    pageIndex += 1
+    if searchQuery.isEmpty && scope == .all {
+      try? loadBrowsePage()
+    } else {
+      refreshItems(resetSelection: true)
     }
-
-    guard !Task.isCancelled else { return }
-
-    limitHistorySize(to: Defaults[.size])
-    refreshItems(resetSelection: false)
-    updateShortcuts()
-    AppState.shared.popup.needsResize = true
-    loadTask = nil
+    AppState.shared.navigator.select()
   }
 
-  /// Fold a freshly paged batch into `all` in O(n + m), keeping `Sorter`'s
-  /// ordering. Returns how many rows were genuinely new.
-  ///
-  /// `all` and `page` are each already in `Sorter`'s order, so their union is a
-  /// linear merge rather than another sort. Re-sorting here meant one
-  /// `Sorter.sort` — two chained full `sorted(by:)` passes — per page over a
-  /// growing array, which for a 10k history is ~83 passes and asymptotically
-  /// worse than the single fetch and single sort the paging replaced.
-  ///
-  /// Nothing here touches `items`: recomputing that runs a whole `Search` pass
-  /// and is coalesced by the caller instead of fired once per page.
-  ///
-  /// The batch is still deduplicated against what is already loaded. That is for
-  /// rows *added* mid-load, not deleted ones — a keyset cursor already survives
-  /// deletes. A copy made while paging can still land below the cursor and be
-  /// read a second time: a consolidated duplicate inherits the old item's
-  /// `firstCopiedAt`, and its `numberOfCopies` is whatever the two summed to.
   @MainActor
-  @discardableResult
-  private func merge(_ page: [HistoryItem], by sortBy: Sorter.By) -> Int {
-    let known = Set(all.map { ObjectIdentifier($0.item) })
-    let incoming = page
-      .filter { !known.contains(ObjectIdentifier($0)) }
-      .map { HistoryItemDecorator($0) }
-    guard !incoming.isEmpty else { return 0 }
-
-    // `Sorter` sorts by key and then stably by pin, so `all` is a pinned block
-    // and an unpinned block, each internally in key order. Only unpinned rows
-    // are ever paged, so the merge happens entirely inside the unpinned block
-    // and the pinned block is carried across untouched.
-    var pinned: [HistoryItemDecorator] = []
-    var unpinned: [HistoryItemDecorator] = []
-    unpinned.reserveCapacity(all.count)
-    for decorator in all {
-      if decorator.isPinned {
-        pinned.append(decorator)
-      } else {
-        unpinned.append(decorator)
-      }
+  func showNewerPage() {
+    guard hasNewerPage else { return }
+    pageIndex -= 1
+    if searchQuery.isEmpty && scope == .all {
+      try? loadBrowsePage()
+    } else {
+      refreshItems(resetSelection: true)
     }
-
-    var merged: [HistoryItemDecorator] = []
-    merged.reserveCapacity(unpinned.count + incoming.count)
-
-    var left = 0
-    var right = 0
-    while left < unpinned.count, right < incoming.count {
-      // Ties go to the already-loaded side, which is what `Sorter`'s stable sort
-      // does for a single fetch: rows the store handed over earlier stay first.
-      if Self.precedes(incoming[right].item, unpinned[left].item, by: sortBy) {
-        merged.append(incoming[right])
-        right += 1
-      } else {
-        merged.append(unpinned[left])
-        left += 1
-      }
-    }
-    merged.append(contentsOf: unpinned[left...])
-    merged.append(contentsOf: incoming[right...])
-
-    all = Defaults[.pinTo] == .bottom ? merged + pinned : pinned + merged
-
-    return incoming.count
-  }
-
-  /// `Sorter`'s ordering predicate for a single key, minus the pin pass.
-  ///
-  /// Kept deliberately identical to `Sorter.bySortingAlgorithm`: `merge` has to
-  /// produce exactly the order one fetch followed by one `Sorter.sort` would
-  /// have produced, and the only way to guarantee that is to compare the same
-  /// way.
-  private static func precedes(_ lhs: HistoryItem, _ rhs: HistoryItem, by sortBy: Sorter.By) -> Bool {
-    switch sortBy {
-    case .firstCopiedAt:
-      return lhs.firstCopiedAt > rhs.firstCopiedAt
-    case .numberOfCopies:
-      return lhs.numberOfCopies > rhs.numberOfCopies
-    default:
-      return lhs.lastCopiedAt > rhs.lastCopiedAt
-    }
+    AppState.shared.navigator.select()
   }
 
   /// `all`, narrowed to the active scope. Identical to `all` on macOS 14 and 15,
@@ -342,21 +251,41 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     return all.filter { scope.matches($0.item) }
   }
 
-  /// The candidate set a search runs over: the scoped items, narrowed further by
-  /// the store when the search mode allows it losslessly.
+  /// The browse page stays small; a query instead searches the complete store
+  /// and materializes only the selected page of matches.
   @MainActor
   private func searchCandidates() -> [HistoryItemDecorator] {
-    let scoped = scopedItems()
-
-    guard ForkStyle.isActive,
-          !searchQuery.isEmpty,
-          Search.canNarrowInStore(Defaults[.searchMode]),
-          let matched = try? Storage.shared.fetchHistoryItems(titleContaining: searchQuery) else {
-      return scoped
+    guard !searchQuery.isEmpty || (ForkStyle.isActive && scope != .all) else {
+      return all
     }
 
-    let ids = Set(matched.map { ObjectIdentifier($0) })
-    return scoped.filter { ids.contains(ObjectIdentifier($0.item)) }
+    let key = SearchCacheKey(
+      query: searchQuery, scope: scope, mode: Defaults[.searchMode], sortBy: Defaults[.sortBy]
+    )
+    if searchCacheKey != key {
+      do {
+        searchMatchIDs = try Storage.shared.searchHistoryIdentifiers(query: searchQuery, scope: scope)
+        searchCacheKey = key
+        pageIndex = 0
+      } catch {
+        logger.error("Failed to search history: \(String(reflecting: error))")
+        return scopedItems()
+      }
+    }
+
+    let pageSize = max(1, Defaults[.size])
+    let start = pageIndex * pageSize
+    guard start < searchMatchIDs.count else { return [] }
+    let end = min(start + pageSize, searchMatchIDs.count)
+    var visible: [PersistentIdentifier: HistoryItemDecorator] = [:]
+    for decorator in all + items {
+      visible[decorator.item.persistentModelID] = decorator
+    }
+    return searchMatchIDs[start..<end].compactMap { id in
+      if let existing = visible[id] { return existing }
+      guard let item = Storage.shared.context.model(for: id) as? HistoryItem else { return nil }
+      return HistoryItemDecorator(item)
+    }
   }
 
   /// The single place `items` is recomputed from `all`, the scope and the query.
@@ -380,86 +309,92 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
   }
 
   @MainActor
-  private func limitHistorySize(to maxSize: Int) {
-    let unpinned = all.filter(\.isUnpinned)
-    if unpinned.count >= maxSize {
-      unpinned[maxSize...].forEach(delete)
-    }
-  }
-
-  @MainActor
   func insertIntoStorage(_ item: HistoryItem) throws {
-    logger.info("Inserting item with id '\(item.title)'")
+    logger.info("Inserting history item")
     Storage.shared.context.insert(item)
     Storage.shared.context.processPendingChanges()
-    try? Storage.shared.context.save()
+    try Storage.shared.context.save()
   }
 
   @discardableResult
   @MainActor
   func add(_ item: HistoryItem) -> HistoryItemDecorator {
-    if #available(macOS 15.0, *) {
-      try? History.shared.insertIntoStorage(item)
-    } else {
-      // On macOS 14 the history item needs to be inserted into storage directly after creating it.
-      // It was already inserted after creation in Clipboard.swift
+    item.duplicateFingerprint = item.computeDuplicateFingerprint()
+    do {
+      if #available(macOS 15.0, *) {
+        try insertIntoStorage(item)
+      } else {
+        // Clipboard inserted the model before its pasteboard data was finalized.
+        try Storage.shared.context.save()
+      }
+    } catch {
+      logger.error("Failed to persist history item: \(String(reflecting: error))")
+      Storage.shared.context.rollback()
+      return HistoryItemDecorator(item)
     }
 
-    var removedItemIndex: Int?
-    if let existingHistoryItem = findSimilarItem(item) {
+    let existing = findSimilarItem(item)
+    if let existing {
       if isModified(item) == nil {
-        transferContents(from: existingHistoryItem, to: item)
+        transferContents(from: existing, to: item)
       }
-      item.firstCopiedAt = existingHistoryItem.firstCopiedAt
-      item.numberOfCopies += existingHistoryItem.numberOfCopies
-      item.pin = existingHistoryItem.pin
-      item.title = existingHistoryItem.title
+      item.firstCopiedAt = existing.firstCopiedAt
+      item.numberOfCopies += existing.numberOfCopies
+      item.pin = existing.pin
+      item.title = existing.title
+      item.duplicateFingerprint = item.computeDuplicateFingerprint()
       if !item.fromMaccy {
-        item.application = existingHistoryItem.application
+        item.application = existing.application
       }
-      logger.info("Removing duplicate item '\(item.title)'")
-      removedItemIndex = all.firstIndex(where: { $0.item == existingHistoryItem })
-      if let removedItemIndex {
-        cleanup(all[removedItemIndex])
+      deleteFromStorage(existing)
+      do {
+        Storage.shared.context.processPendingChanges()
+        try Storage.shared.context.save()
+      } catch {
+        logger.error("Failed to merge duplicate history item: \(String(reflecting: error))")
+        Storage.shared.context.rollback()
+        try? loadBrowsePage()
+        return HistoryItemDecorator(item)
       }
-      deleteFromStorage(existingHistoryItem)
-      if let removedItemIndex {
-        all.remove(at: removedItemIndex)
-      }
+      logger.info("Removed duplicate history item")
     } else {
-      Task {
-        Notifier.notify(body: item.title, sound: .write)
-      }
+      Task { Notifier.notify(body: item.title, sound: .write) }
     }
-
-    // Remove exceeding items. Do this after the item is added to avoid removing something
-    // if a duplicate was found as then the size already stayed the same.
-    limitHistorySize(to: Defaults[.size] - 1)
 
     sessionLog[Clipboard.shared.changeCount] = item
+    searchCacheKey = nil
+    totalUnpinnedCount = (try? Storage.shared.countUnpinnedHistoryItems()) ?? totalUnpinnedCount
 
-    var itemDecorator: HistoryItemDecorator
-    if let pin = item.pin {
-      itemDecorator = HistoryItemDecorator(item, shortcuts: KeyShortcut.create(character: pin))
-      if let removedItemIndex {
-        // If pin to bottom -> last element should be inserted to the removedItemIndex - 1
-        // Or to the last all array place.
-        all.insert(itemDecorator, at: min(removedItemIndex, all.count))
-      }
-    } else {
-      itemDecorator = HistoryItemDecorator(item)
-
-      let sortedItems = sorter.sort(all.map(\.item) + [item])
-      if let index = sortedItems.firstIndex(of: item) {
-        all.insert(itemDecorator, at: index)
-      }
-
-      items = scopedItems()
-      updateUnpinnedShortcuts()
-      AppState.shared.popup.needsResize = true
+    if pageIndex > 0 {
+      pageIndex = 0
+      try? loadBrowsePage()
+      return all.first(where: { $0.item == item }) ?? HistoryItemDecorator(item)
     }
 
-    return itemDecorator
+    if let existing {
+      if let removed = all.first(where: { $0.item == existing }) {
+        cleanup(removed)
+      }
+      all.removeAll { $0.item == existing }
+    }
+
+    let decorator = HistoryItemDecorator(item)
+    let sorted = sorter.sort(all.map(\.item) + [item])
+    if let index = sorted.firstIndex(of: item) {
+      all.insert(decorator, at: index)
+    }
+
+    // Evict from the browse page only. The database retains the row until age
+    // expiry, and search can still find it across the complete history.
+    let pageSize = max(1, Defaults[.size])
+    let overflow = Array(all.filter(\.isUnpinned).dropFirst(pageSize))
+    for old in overflow { cleanup(old) }
+    let overflowIDs = Set(overflow.map(\.id))
+    all.removeAll { overflowIDs.contains($0.id) }
+
+    refreshItems(resetSelection: false)
+    AppState.shared.popup.needsResize = true
+    return decorator
   }
 
   @MainActor
@@ -485,7 +420,11 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       }
       all.removeAll(where: \.isUnpinned)
       sessionLog.removeValues { $0.pin == nil }
-      items = scopedItems()
+      items.removeAll(where: \.isUnpinned)
+      searchCacheKey = nil
+      searchMatchIDs = []
+      pageIndex = 0
+      totalUnpinnedCount = 0
 
       try? Storage.shared.context.transaction {
         try? Storage.shared.context.delete(
@@ -516,7 +455,11 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       }
       all.removeAll()
       sessionLog.removeAll()
-      items = scopedItems()
+      items.removeAll()
+      searchCacheKey = nil
+      searchMatchIDs = []
+      pageIndex = 0
+      totalUnpinnedCount = 0
 
       do {
         let context = Storage.shared.context
@@ -557,6 +500,13 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     all.removeAll { $0 == item }
     items.removeAll { $0 == item }
     sessionLog.removeValues { $0 == item.item }
+
+    searchCacheKey = nil
+    if searchQuery.isEmpty && scope == .all {
+      try? loadBrowsePage()
+    } else {
+      refreshItems(resetSelection: false)
+    }
 
     updateUnpinnedShortcuts()
     Task {
@@ -674,7 +624,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     pasteStack = stack
 
     logger.info("Initialising PasteStack with \(stack.items.count) items")
-    logger.info("Copying \(item.item.title) from PasteStack")
+    logger.info("Copying item from PasteStack")
 
     if modifierFlags.isEmpty {
       AppState.shared.popup.close()
@@ -712,7 +662,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       return
     }
 
-    logger.info("PasteStack pasted \(pasted.item.title)")
+    logger.info("PasteStack pasted item")
 
     stack.items.removeFirst()
 
@@ -722,7 +672,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       return
     }
 
-    logger.info("Copying \(item.item.title) from PasteStack. \(stack.items.count) items remaining in stack.")
+    logger.info("Copying item from PasteStack. \(stack.items.count) items remaining in stack.")
 
     Task {
       if stack.modifierFlags.isEmpty {
@@ -755,16 +705,10 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     guard let item else { return }
 
     item.togglePin()
-
-    let sortedItems = sorter.sort(all.map(\.item))
-    if let currentIndex = all.firstIndex(of: item),
-       let newIndex = sortedItems.firstIndex(of: item.item) {
-      all.remove(at: currentIndex)
-      all.insert(item, at: newIndex)
-    }
-
-    items = scopedItems()
-
+    try? Storage.shared.context.save()
+    searchCacheKey = nil
+    pageIndex = 0
+    try? loadBrowsePage()
     searchQuery = ""
     updateUnpinnedShortcuts()
     if item.isUnpinned {
@@ -774,11 +718,19 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
 
   @MainActor
   private func findSimilarItem(_ item: HistoryItem) -> HistoryItem? {
+    if let modified = isModified(item) { return modified }
+
+    if let fingerprint = item.duplicateFingerprint,
+       let candidates = try? Storage.shared.fetchDuplicateCandidates(fingerprint: fingerprint),
+       let duplicate = candidates.first(where: { $0 != item && $0.supersedes(item) }) {
+      return duplicate
+    }
+
     if let duplicate = all.first(where: { $0.item != item && $0.item.supersedes(item) }) {
       return duplicate.item
     }
 
-    return isModified(item)
+    return nil
   }
 
   private func isModified(_ item: HistoryItem) -> HistoryItem? {

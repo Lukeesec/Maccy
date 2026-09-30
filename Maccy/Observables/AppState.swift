@@ -132,6 +132,8 @@ class AppState: Sendable {
   /// Whether the scope picker is showing. While it is, it owns the arrows,
   /// Return and Escape -- a menu takes those from whatever is behind it.
   var scopePickerOpen: Bool = false
+  var scopePickerUsageOpen: Bool = false
+  var usageSnapshot: Storage.UsageSnapshot?
 
   /// Row the scope picker has highlighted. Meaningless while it is closed.
   var scopePickerSelection: ScopePickerRow = .scope(.all)
@@ -184,6 +186,7 @@ class AppState: Sendable {
 
   func closeScopePicker() {
     scopePickerIsCommand = false
+    scopePickerUsageOpen = false
 
     guard scopePickerOpen else { return }
 
@@ -281,6 +284,8 @@ class AppState: Sendable {
     // Escape said no. Leave it closed until the "/" itself goes away.
     guard !scopeCommandDismissed else { return }
 
+    scopePickerUsageOpen = false
+
     let rows = ScopePickerRow.rows(matching: String(query.dropFirst()))
     guard !rows.isEmpty else {
       closeScopePicker()
@@ -304,6 +309,7 @@ class AppState: Sendable {
   /// Moves the highlight, wrapping at both ends the way a menu does, through the
   /// rows the command has left showing rather than through all of them.
   func moveScopePickerSelection(by delta: Int) {
+    guard !scopePickerUsageOpen else { return }
     let rows = scopePickerRows
     guard !rows.isEmpty else { return }
     guard let index = rows.firstIndex(of: scopePickerSelection) else {
@@ -317,8 +323,21 @@ class AppState: Sendable {
 
   @MainActor
   func commitScopePicker() {
+    if scopePickerUsageOpen {
+      closeScopePicker()
+      return
+    }
     let row = scopePickerSelection
     let wasCommand = scopePickerIsCommand
+    if row == .usage {
+      scopePickerIsCommand = false
+      if wasCommand, history.searchQuery.hasPrefix("/") {
+        history.searchQuery = ""
+      }
+      usageSnapshot = Storage.shared.usageSnapshot()
+      scopePickerUsageOpen = true
+      return
+    }
     closeScopePicker()
 
     // The "/..." the palette was driven by is not a search term. Committing
@@ -331,6 +350,8 @@ class AppState: Sendable {
     switch row {
     case .scope(let newScope):
       scope = newScope
+    case .usage:
+      return
     case .settings:
       // Same call as the footer's Preferences row and ⌘,. The settings window
       // taking key closes the panel on its own, via FloatingPanel.resignKey.

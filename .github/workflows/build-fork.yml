@@ -124,6 +124,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish durable GitHub Release
+        if: github.ref == 'refs/heads/spotlight-ui'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

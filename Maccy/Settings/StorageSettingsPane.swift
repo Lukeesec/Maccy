@@ -57,6 +57,7 @@ struct StorageSettingsPane: View {
   }
 
   @Default(.size) private var size
+  @Default(.retentionMonths) private var retentionMonths
   @Default(.sortBy) private var sortBy
 
   @State private var viewModel = ViewModel()
@@ -108,6 +109,12 @@ struct StorageSettingsPane: View {
             .onAppear {
               storageSize = Storage.shared.size
             }
+        }
+      }
+
+      Settings.Section(label: { Text("Retention", tableName: "StorageSettings") }) {
+        Stepper(value: $retentionMonths, in: 1...24) {
+          Text(String(format: NSLocalizedString("RetentionMonths", tableName: "StorageSettings", comment: ""), retentionMonths))
         }
       }
 

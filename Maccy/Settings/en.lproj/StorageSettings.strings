@@ -4,8 +4,10 @@
 "Images" = "Images";
 "Text" = "Text";
 "SaveDescription" = "Change what types of copied content should be stored.";
-"Size" = "Size:";
-"SizeTooltip" = "Number of history items to keep.\nDefault: 200.";
+"Size" = "Rows per page:";
+"SizeTooltip" = "Number of history rows loaded at once. Older rows remain searchable on disk.";
+"Retention" = "Keep copies for:";
+"RetentionMonths" = "%d months";
 "CurrentSizeTooltip" = "Current size on disk.";
 "SortBy" = "Sort by:";
 "LastCopiedAt" = "Time of last copy";
