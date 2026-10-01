@@ -154,10 +154,6 @@ struct HistoryListView: View {
             searchFocused = true
             appState.focusSearchRow()
             appState.navigator.isKeyboardNavigating = true
-            // NSPanel keeps its SwiftUI scroll view alive while hidden. Return
-            // to the newest page position on every open so keyboard navigation
-            // from a previous session cannot make the first row look missing.
-            scrollToPageStart(proxy)
             if !ForkStyle.isActive {
               appState.navigator.select(
                 item: appState.history.unpinnedItems.first ?? appState.history.pinnedItems.first
@@ -192,6 +188,7 @@ struct HistoryListView: View {
       .contentMargins(.top, scrollTopPadding, for: .scrollIndicators)
       .contentMargins(.bottom, scrollBottomPadding, for: .scrollIndicators)
     }
+    .id(ForkStyle.isActive ? appState.popup.openCount : 0)
     .scrollIndicators(ForkStyle.isActive ? .never : .automatic)
     .accessibilityIdentifier("history-scroll-view")
 

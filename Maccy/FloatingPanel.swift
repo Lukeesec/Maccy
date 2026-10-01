@@ -96,6 +96,12 @@ class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
     orderFrontRegardless()
     makeKey()
     isPresented = true
+    if ForkStyle.isActive {
+      AppState.shared.focusSearchRow()
+      AppState.shared.refocusSearch()
+      AppState.shared.navigator.scrollTarget = nil
+      AppState.shared.popup.openCount &+= 1
+    }
 
     if popupPosition == .statusItem {
       DispatchQueue.main.async {

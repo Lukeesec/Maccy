@@ -77,6 +77,9 @@ class Popup {
   static var selectionUsesInvertedLabel: Bool { Metrics.shared.selectionUsesInvertedLabel }
 
   var needsResize = false
+  /// Changes on every panel opening so the retained SwiftUI scroll view can
+  /// start at its first row instead of keeping the previous session's offset.
+  var openCount = 0
   var height: CGFloat = 0
   var headerHeight: CGFloat = 0
   var extraTopHeight: CGFloat = 0
