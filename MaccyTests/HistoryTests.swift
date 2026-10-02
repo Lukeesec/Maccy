@@ -723,7 +723,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
   }
 
   func testRestorePreservesPinFromDuplicateArchiveRecordAndAppliesRetention() throws {
-    let item = historyItem("archived")
+    let item = historyItem("archived", persisted: false)
     var record = HistoryArchive.Record(item)
     record.lastCopiedAt = Calendar.current.date(byAdding: .month, value: -7, to: .now)!
     record.firstCopiedAt = record.lastCopiedAt
