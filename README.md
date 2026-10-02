@@ -33,7 +33,7 @@ brew uninstall --cask maccy
 Then install the latest durable [GitHub Release](https://github.com/Lukeesec/Maccy/releases/latest):
 
 ```sh
-git clone --branch spotlight-ui --single-branch https://github.com/Lukeesec/Maccy.git
+git clone --branch main --single-branch https://github.com/Lukeesec/Maccy.git
 cd Maccy
 script/install-artifact.sh
 ```
@@ -117,10 +117,11 @@ Maccy. Remove the old Accessibility entry and grant access to the newly installe
 
 ## Building and testing
 
-Every push to `spotlight-ui` and every manual **Build fork** dispatch runs the
+Every push to `main` and every manual **Build fork** dispatch runs the
 unit tests, builds a universal Release app on GitHub's macOS 26 runner, verifies
-its architecture and security properties, and publishes `Maccy.zip` plus
-`Maccy.zip.sha256` as a durable GitHub Release. The Actions artifact is only a
+its architecture and security properties. Builds from `main` publish `Maccy.zip`
+plus `Maccy.zip.sha256` as a durable GitHub Release. Manual builds of other
+branches only upload an Actions artifact. For `main`, the artifact is a
 short-lived duplicate; installation uses the Release.
 
 Local builds require full Xcode 26:

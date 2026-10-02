@@ -43,7 +43,7 @@ The release is durable and anonymously downloadable. GitHub Actions also keeps a
 30-day copy for build diagnostics, but the installer does not depend on it or on
 an authenticated GitHub CLI session.
 
-The **Build fork** workflow runs on pushes to `spotlight-ui` and manual dispatch:
+The **Build fork** workflow runs on pushes to `main` and manual dispatch:
 
 1. Run all `MaccyTests`, including the preview-selection regression test.
 2. Cross-compile the Release app for Apple Silicon and Intel.
@@ -51,12 +51,13 @@ The **Build fork** workflow runs on pushes to `spotlight-ui` and manual dispatch
 4. Verify every Mach-O file has both architectures, the deep signature is valid,
    the App Sandbox entitlement is absent, and hardened runtime is off.
 5. Package the app, generate its SHA-256 checksum, and publish a commit-specific
-   GitHub Release.
+   GitHub Release when building `main`. Other manually dispatched branches
+   only upload an Actions artifact.
 
 Repository collaborators can request a build with:
 
 ```sh
-gh workflow run build-fork.yml --repo Lukeesec/Maccy --ref spotlight-ui
+gh workflow run build-fork.yml --repo Lukeesec/Maccy --ref main
 gh run watch --repo Lukeesec/Maccy
 ```
 
@@ -181,7 +182,7 @@ conflict resolution across UI, navigation, storage, and tests:
 ```sh
 git fetch upstream
 git rebase upstream/master
-git push --force-with-lease origin spotlight-ui
+git push --force-with-lease origin main
 ```
 
 Do not use the in-app **Check for Updates** command for this fork; Sparkle still
