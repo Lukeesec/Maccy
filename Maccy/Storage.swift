@@ -448,7 +448,7 @@ extension Storage {
           item.lastCopiedAt = record.lastCopiedAt
           item.numberOfCopies = record.numberOfCopies
           item.pin = plan.pin
-          item.title = record.title.removingScalarsUnsafeForTitleLayout
+          item.title = record.title.removingScalarsUnsafeForTitleLayout()
           item.duplicateFingerprint = item.computeDuplicateFingerprint() ?? ""
           context.insert(item)
         }
