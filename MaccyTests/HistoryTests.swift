@@ -654,6 +654,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     item.contents.append(HistoryItemContent(type: "custom.nil", value: nil))
     try Storage.shared.context.save()
     let originalDate = item.firstCopiedAt
+    let originalLastDate = item.lastCopiedAt
     let archive = try Storage.shared.exportHistory()
     history.clearAll()
 
@@ -668,6 +669,7 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     XCTAssertEqual(restored.contents.first { $0.type == "custom.binary" }?.value, Data([0, 255, 42]))
     XCTAssertNil(restored.contents.first { $0.type == "custom.nil" }?.value)
     XCTAssertEqual(restored.firstCopiedAt.timeIntervalSince1970, originalDate.timeIntervalSince1970, accuracy: 0.001)
+    XCTAssertEqual(restored.lastCopiedAt.timeIntervalSince1970, originalLastDate.timeIntervalSince1970, accuracy: 0.001)
     let repeated = try Storage.shared.restoreHistory(archive)
     XCTAssertEqual(repeated.imported, 0)
     XCTAssertEqual(repeated.duplicates, 1)
@@ -757,6 +759,10 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
 
   func testLargePreviewCannotPasteOrEditAnExcerpt() throws {
     guard ForkStyle.isActive else { throw XCTSkip("Editable previews require macOS 26") }
+    let boundary = String(repeating: "a", count: PreviewEditor.excerptLimit)
+    XCTAssertFalse(PreviewEditor.excerpt(boundary).truncated)
+    XCTAssertTrue(PreviewEditor.excerpt(boundary + "b").truncated)
+    XCTAssertEqual(PreviewEditor.excerpt(boundary + "b").text, boundary)
     let text = String(repeating: "🙂", count: 10_000) + "complete-tail"
     let item = history.add(historyItem(text))
     let editor = PreviewEditor.shared
