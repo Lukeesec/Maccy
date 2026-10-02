@@ -306,7 +306,8 @@ struct KeyHandlingView<Content: View>: View { // swiftlint:disable:this type_bod
           PreviewEditor.shared.begin(item: item)
           // Focusing an item the pane renders read-only would strand isFocused
           // at true with no field on screen, which silently disables Up/Down.
-          guard PreviewEditor.isEditable(appState.navigator.leadHistoryItem) else {
+          guard PreviewEditor.isEditable(appState.navigator.leadHistoryItem),
+                !PreviewEditor.shared.isTruncated else {
             return .handled
           }
           PreviewEditor.shared.isFocused = true

@@ -645,6 +645,149 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
     try assertStorageCounts(items: 1, contents: 1)
   }
 
+  func testHistoryArchiveRoundTripAndRepeatedRestore() throws {
+    let item = historyItem("portable clipboard")
+    item.application = "com.example.Source"
+    item.pin = "b"
+    item.numberOfCopies = 7
+    item.contents.append(HistoryItemContent(type: "custom.binary", value: Data([0, 255, 42])))
+    item.contents.append(HistoryItemContent(type: "custom.nil", value: nil))
+    try Storage.shared.context.save()
+    let originalDate = item.firstCopiedAt
+    let archive = try Storage.shared.exportHistory()
+    history.clearAll()
+
+    let result = try Storage.shared.restoreHistory(archive)
+    XCTAssertEqual(result.imported, 1)
+    let restored = try XCTUnwrap(Storage.shared.context.fetch(FetchDescriptor<HistoryItem>()).first)
+    XCTAssertEqual(restored.application, "com.example.Source")
+    XCTAssertEqual(restored.title, "portable clipboard")
+    XCTAssertEqual(restored.pin, "b")
+    XCTAssertEqual(restored.numberOfCopies, 7)
+    XCTAssertEqual(restored.contents.count, 3)
+    XCTAssertEqual(restored.contents.first { $0.type == "custom.binary" }?.value, Data([0, 255, 42]))
+    XCTAssertNil(restored.contents.first { $0.type == "custom.nil" }?.value)
+    XCTAssertEqual(restored.firstCopiedAt.timeIntervalSince1970, originalDate.timeIntervalSince1970, accuracy: 0.001)
+    let repeated = try Storage.shared.restoreHistory(archive)
+    XCTAssertEqual(repeated.imported, 0)
+    XCTAssertEqual(repeated.duplicates, 1)
+    try assertStorageCounts(items: 1, contents: 3)
+  }
+
+  func testExportIncludesPendingPinAndTitleEdits() throws {
+    let item = historyItem("pending")
+    try Storage.shared.context.save()
+    item.pin = "b"
+    item.title = "renamed pending clip"
+    let archive = try JSONDecoder().decode(HistoryArchive.self, from: Storage.shared.exportHistory())
+    XCTAssertEqual(archive.records.first?.pin, "b")
+    XCTAssertEqual(archive.records.first?.title, "renamed pending clip")
+  }
+
+  func testRestoreRejectsMalformedAndUnsupportedArchivesBeforeWriting() throws {
+    let retained = historyItem("existing")
+    try Storage.shared.context.save()
+    XCTAssertThrowsError(try Storage.shared.restoreHistory(Data("not json".utf8)))
+    var archive = HistoryArchive(records: [HistoryArchive.Record(retained)])
+    archive.version = 99
+    XCTAssertThrowsError(try Storage.shared.restoreHistory(JSONEncoder().encode(archive)))
+    archive.version = 1
+    archive.records.append(archive.records[0])
+    archive.records[1].numberOfCopies = 0
+    XCTAssertThrowsError(try Storage.shared.restoreHistory(JSONEncoder().encode(archive)))
+    try assertStorageCounts(items: 1, contents: 1)
+  }
+
+  func testRestoreMergesOffPageDuplicatesAndReassignsPinConflicts() throws {
+    Defaults[.size] = 2
+    let original = history.add(historyItem("off-page"))
+    for index in 0..<5 { history.add(historyItem("newer-\(index)")) }
+    XCTAssertFalse(history.all.contains(original))
+    let destinationPin = history.add(historyItem("destination pin"))
+    destinationPin.item.pin = "b"
+    try Storage.shared.context.save()
+    var record = HistoryArchive.Record(original.item)
+    record.pin = "b"
+    record.numberOfCopies = 12
+    let result = try Storage.shared.restoreHistory(JSONEncoder().encode(HistoryArchive(records: [record])))
+    XCTAssertEqual(result.imported, 0)
+    XCTAssertEqual(result.duplicates, 1)
+    XCTAssertEqual(result.reassignedPins, 1)
+    XCTAssertEqual(destinationPin.item.pin, "b")
+    XCTAssertNotNil(original.item.pin)
+    XCTAssertNotEqual(original.item.pin, "b")
+    XCTAssertEqual(original.item.numberOfCopies, 12)
+    try assertStorageCounts(items: 7, contents: 7)
+  }
+
+  func testRestorePreservesPinFromDuplicateArchiveRecordAndAppliesRetention() throws {
+    let item = historyItem("archived")
+    var record = HistoryArchive.Record(item)
+    record.lastCopiedAt = Calendar.current.date(byAdding: .month, value: -7, to: .now)!
+    record.firstCopiedAt = record.lastCopiedAt
+    var pinned = record
+    pinned.pin = "b"
+    var expired = record
+    expired.contents[0].value = Data("expired".utf8)
+    history.clearAll()
+    let result = try Storage.shared.restoreHistory(JSONEncoder().encode(
+      HistoryArchive(records: [record, pinned, expired])
+    ))
+    XCTAssertEqual(result.imported, 1)
+    XCTAssertEqual(result.duplicates, 1)
+    XCTAssertEqual(result.expired, 1)
+    XCTAssertEqual(try Storage.shared.context.fetch(FetchDescriptor<HistoryItem>()).first?.pin, "b")
+    try assertStorageCounts(items: 1, contents: 1)
+  }
+
+  func testRestoreWithNoAvailablePinsLeavesStoreUnchanged() throws {
+    for pin in HistoryItem.supportedPins {
+      let item = historyItem("pin-\(pin)")
+      item.pin = pin
+    }
+    try Storage.shared.context.save()
+    var record = HistoryArchive.Record(HistoryItem(contents: [
+      HistoryItemContent(type: "public.utf8-plain-text", value: Data("new clip".utf8))
+    ]))
+    record.pin = "b"
+    let count = HistoryItem.supportedPins.count
+    XCTAssertThrowsError(try Storage.shared.restoreHistory(JSONEncoder().encode(HistoryArchive(records: [record]))))
+    try assertStorageCounts(items: count, contents: count)
+  }
+
+  func testLargePreviewCannotPasteOrEditAnExcerpt() throws {
+    guard ForkStyle.isActive else { throw XCTSkip("Editable previews require macOS 26") }
+    let text = String(repeating: "🙂", count: 10_000) + "complete-tail"
+    let item = history.add(historyItem(text))
+    let editor = PreviewEditor.shared
+    defer { editor.begin(item: nil) }
+    editor.begin(item: item)
+    XCTAssertTrue(editor.isTruncated)
+    XCTAssertEqual(editor.draft.count, PreviewEditor.excerptLimit)
+    editor.draft = "accidental edit"
+    XCTAssertFalse(editor.isEdited)
+    XCTAssertNil(editor.effectiveText)
+    history.copy(item, removeFormatting: true)
+    XCTAssertEqual(NSPasteboard.general.string(forType: .string), text)
+    editor.loadFullText()
+    XCTAssertFalse(editor.isTruncated)
+    XCTAssertEqual(editor.draft, text)
+    editor.draft += " edited"
+    XCTAssertEqual(editor.effectiveText, text + " edited")
+    editor.discard()
+    XCTAssertTrue(editor.isTruncated)
+    XCTAssertNil(editor.effectiveText)
+    let short = history.add(historyItem("short editable text"))
+    editor.begin(item: short)
+    XCTAssertFalse(editor.isTruncated)
+    XCTAssertEqual(editor.draft, "short editable text")
+    editor.draft += " changed"
+    XCTAssertEqual(editor.effectiveText, "short editable text changed")
+    editor.begin(item: item)
+    XCTAssertTrue(editor.isTruncated)
+    XCTAssertNil(editor.effectiveText)
+  }
+
   private func assertStorageCounts(
     items: Int,
     contents: Int,

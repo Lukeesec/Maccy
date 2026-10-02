@@ -8,6 +8,7 @@ struct PreviewItemView: View {
   var item: HistoryItemDecorator
 
   @State private var editor = PreviewEditor.shared
+  @State private var fullReadOnlyItemID: UUID?
 
   /// Only plain text is editable. An image has nothing to type into, and a file
   /// item's "text" is a path the pasteboard does not carry as a string.
@@ -48,9 +49,11 @@ struct PreviewItemView: View {
     // The draft belongs to one row. Rendering a different item is the natural
     // point to throw the previous one away.
     .task(id: item.id) {
+      fullReadOnlyItemID = nil
       editor.begin(item: isEditable ? item : nil)
     }
     .onDisappear {
+      fullReadOnlyItemID = nil
       editor.begin(item: nil)
     }
   }
@@ -100,8 +103,16 @@ struct PreviewItemView: View {
   /// macOS 26.
   @ViewBuilder
   private var textPreview: some View {
-    let text = item.previewText
-    if text.count >= Self.largeTextThreshold {
+    let original = item.previewText
+    let excerpt = PreviewEditor.excerpt(original)
+    let text = fullReadOnlyItemID == item.id ? original : excerpt.text
+    if excerpt.truncated && fullReadOnlyItemID != item.id {
+      VStack(alignment: .leading, spacing: 8) {
+        LargeTextPreviewView(text: text)
+        Text("preview_excerpt_notice").font(.caption).foregroundStyle(.secondary)
+        Button("preview_load_full_text") { fullReadOnlyItemID = item.id }
+      }
+    } else if text.count >= Self.largeTextThreshold {
       LargeTextPreviewView(text: text)
         .id("textpreview-\(item.id)")
     } else {
@@ -123,26 +134,36 @@ struct PreviewItemView: View {
         editedBadge
       }
 
-      EditablePreviewTextView(
-        text: Binding(get: { editor.draft }, set: { editor.draft = $0 }),
-        isFocused: Binding(get: { editor.isFocused }, set: { editor.isFocused = $0 }),
-        content: editor.draft,
-        focused: editor.isFocused
-      )
-      .frame(maxWidth: .infinity, minHeight: 44)
-      .padding(6)
-      .background(
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .fill(Color.accentColor.opacity(editor.isFocused ? 0.06 : 0))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .strokeBorder(
-            editor.isFocused ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.08),
-            lineWidth: 1
-          )
-      )
-      .animation(.easeOut(duration: 0.12), value: editor.isFocused)
+      if editor.isTruncated {
+        LargeTextPreviewView(text: editor.draft)
+          .frame(maxWidth: .infinity, minHeight: 44)
+        Text("preview_excerpt_notice").font(.caption).foregroundStyle(.secondary)
+        Button("preview_load_full_text") {
+          editor.loadFullText()
+          editor.isFocused = true
+        }
+      } else {
+        EditablePreviewTextView(
+          text: Binding(get: { editor.draft }, set: { editor.draft = $0 }),
+          isFocused: Binding(get: { editor.isFocused }, set: { editor.isFocused = $0 }),
+          content: editor.draft,
+          focused: editor.isFocused
+        )
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(6)
+        .background(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.accentColor.opacity(editor.isFocused ? 0.06 : 0))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(
+              editor.isFocused ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.08),
+              lineWidth: 1
+            )
+        )
+        .animation(.easeOut(duration: 0.12), value: editor.isFocused)
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }

@@ -13,6 +13,15 @@ import Observation
 @Observable
 final class PreviewEditor {
   static let shared = PreviewEditor()
+  static let excerptLimit = 4_000
+
+  /// Excerpts are read-only and never become clipboard drafts.
+  var isTruncated = false
+
+  static func excerpt(_ text: String) -> (text: String, truncated: Bool) {
+    let prefix = String(text.prefix(excerptLimit + 1))
+    return (String(prefix.prefix(excerptLimit)), prefix.count > excerptLimit)
+  }
 
   /// Whether an item can be edited in the preview at all.
   ///
@@ -53,7 +62,7 @@ final class PreviewEditor {
   var draft: String {
     get { draftStorage }
     set {
-      guard newValue != draftStorage else { return }
+      guard !isTruncated, newValue != draftStorage else { return }
       draftStorage = newValue
       isEdited = newValue != original
     }
@@ -62,7 +71,7 @@ final class PreviewEditor {
   /// The draft when it has actually been edited, otherwise nil.
   ///
   /// The copy path uses this: nil means "copy the item as stored".
-  var effectiveText: String? { isEdited ? draft : nil }
+  var effectiveText: String? { isEdited && !isTruncated ? draft : nil }
 
   private var draftStorage: String = ""
 
@@ -90,14 +99,26 @@ final class PreviewEditor {
 
     itemID = item.id
     original = item.previewText
-    draftStorage = original
+    let excerpt = Self.excerpt(original)
+    draftStorage = excerpt.text
+    isTruncated = excerpt.truncated
     isEdited = false
     isFocused = false
   }
 
+  /// Full layout and editing are an explicit user choice for large clips.
+  func loadFullText() {
+    guard isTruncated else { return }
+    draftStorage = original
+    isTruncated = false
+    isEdited = false
+  }
+
   /// Throw the draft away and clear the edited flag.
   func discard() {
-    draftStorage = original
+    let excerpt = Self.excerpt(original)
+    draftStorage = excerpt.text
+    isTruncated = excerpt.truncated
     isEdited = false
   }
 
@@ -105,6 +126,7 @@ final class PreviewEditor {
     itemID = nil
     original = ""
     draftStorage = ""
+    isTruncated = false
     isEdited = false
     // Clearing focus here is load-bearing: left set with no pane on screen it
     // strands Up/Down navigation.

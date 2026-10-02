@@ -77,6 +77,21 @@ copying an edited draft creates a new clipboard-history entry.
 While editing, all arrow keys remain inside the editor. The first Escape or a
 mouse click leaves editing without closing the preview; another Escape closes it.
 
+Text previews initially show at most 4,000 characters. **Load full text** opens the
+complete text for viewing and editing. Copy and paste from an excerpt always use
+the complete stored clip.
+
+**Settings → Storage → Export history…** creates a portable JSON archive containing
+all saved pasteboard representations, copy dates, source apps, titles, and pins.
+Keep the archive private: clipboard contents are not encrypted. File clips contain
+paths, not copies of the referenced files.
+
+**Restore history…** merges an archive into the destination history. Identical clips
+are merged, existing history is preserved, and conflicting pin shortcuts are
+reassigned when a free shortcut is available. If no pin shortcuts are available,
+restore stops before changing history. The current retention setting applies to
+restored clips; expired unpinned clips are skipped and reported.
+
 ## Data and reverting
 
 The unsandboxed fork uses:

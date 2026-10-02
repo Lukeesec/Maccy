@@ -14,3 +14,8 @@
 "FirstCopiedAt" = "Time of first copy";
 "NumberOfCopies" = "Number of copies";
 "SortByTooltip" = "Default: Time of last copy.";
+
+"Transfer" = "History transfer:";
+"ExportHistory" = "Export history…";
+"RestoreHistory" = "Restore history…";
+"TransferDescription" = "Export contains clipboard contents. Keep the file private. File clips contain paths, not the files themselves. Restore merges history and applies the current retention period.";

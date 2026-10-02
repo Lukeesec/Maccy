@@ -53,3 +53,6 @@
 "preview_paste_edited" = "Paste edited";
 "paste_without_formatting_action" = "Copy & paste without formatting";
 "paste_without_formatting_hint" = "Copies as plain text and pastes at the cursor";
+
+"preview_excerpt_notice" = "Showing the first 4,000 characters. Copy and paste use the complete clip.";
+"preview_load_full_text" = "Load full text";

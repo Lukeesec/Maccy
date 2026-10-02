@@ -1,3 +1,5 @@
+import AppKit
+import UniformTypeIdentifiers
 import SwiftUI
 import Defaults
 import Settings
@@ -62,6 +64,8 @@ struct StorageSettingsPane: View {
 
   @State private var viewModel = ViewModel()
   @State private var storageSize = Storage.shared.size
+  @State private var transferMessage: String?
+  @State private var isTransferring = false
 
   private let sizeFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
@@ -118,6 +122,17 @@ struct StorageSettingsPane: View {
         }
       }
 
+      Settings.Section(label: { Text("Transfer", tableName: "StorageSettings") }) {
+        HStack {
+          Button { exportHistory() } label: { Text("ExportHistory", tableName: "StorageSettings") }
+          Button { restoreHistory() } label: { Text("RestoreHistory", tableName: "StorageSettings") }
+        }
+        .disabled(isTransferring)
+        Text("TransferDescription", tableName: "StorageSettings")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
       Settings.Section(label: { Text("SortBy", tableName: "StorageSettings") }) {
         Picker("", selection: $sortBy) {
           ForEach(Sorter.By.allCases) { mode in
@@ -128,6 +143,56 @@ struct StorageSettingsPane: View {
         .frame(width: 160, alignment: .leading)
         .help(Text("SortByTooltip", tableName: "StorageSettings"))
         .accessibilityLabel(Text("SortBy", tableName: "StorageSettings"))
+      }
+    }
+    .alert("History transfer", isPresented: Binding(
+      get: { transferMessage != nil },
+      set: { if !$0 { transferMessage = nil } }
+    )) {
+      Button("OK") { transferMessage = nil }
+    } message: {
+      Text(transferMessage ?? "")
+    }
+  }
+
+  private func exportHistory() {
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.json]
+    panel.nameFieldStringValue = "Maccy-History-\(Date.now.formatted(.iso8601.year().month().day().dateSeparator(.dash))).json"
+    panel.canCreateDirectories = true
+    isTransferring = true
+    panel.begin { response in
+      defer { isTransferring = false }
+      guard response == .OK, let url = panel.url else { return }
+      do {
+        let data = try Storage.shared.exportHistory()
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        transferMessage = "History exported to \(url.lastPathComponent)."
+      } catch {
+        transferMessage = error.localizedDescription
+      }
+    }
+  }
+
+  private func restoreHistory() {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.json]
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    isTransferring = true
+    panel.begin { response in
+      guard response == .OK, let url = panel.url else { isTransferring = false; return }
+      Task { @MainActor in
+        defer { isTransferring = false }
+        do {
+          let result = try Storage.shared.restoreHistory(Data(contentsOf: url))
+          try await History.shared.load()
+          storageSize = Storage.shared.size
+          transferMessage = "Restored \(result.imported) clips; merged \(result.duplicates) duplicates. Skipped \(result.expired) clips outside the current retention period. Adjusted \(result.reassignedPins) pin shortcuts."
+        } catch {
+          transferMessage = error.localizedDescription
+        }
       }
     }
   }
