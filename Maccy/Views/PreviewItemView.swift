@@ -140,7 +140,6 @@ struct PreviewItemView: View {
         Text("preview_excerpt_notice").font(.caption).foregroundStyle(.secondary)
         Button("preview_load_full_text") {
           editor.loadFullText()
-          editor.isFocused = true
         }
       } else {
         EditablePreviewTextView(
