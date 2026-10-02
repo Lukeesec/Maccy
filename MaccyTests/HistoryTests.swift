@@ -392,9 +392,12 @@ class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
 
     let previousState = AppState.shared.preview.state
     let item = history.add(historyItem("escape preview draft"))
+    AppState.shared.navigator.select(item: item)
+    AppState.shared.preview.state = .closed
+    AppState.shared.preview.togglePreview()
+    await waitUntil { AppState.shared.preview.state == .open }
     PreviewEditor.shared.begin(item: item)
     PreviewEditor.shared.isFocused = true
-    AppState.shared.preview.state = .open
     defer {
       PreviewEditor.shared.begin(item: nil)
       AppState.shared.preview.state = previousState
